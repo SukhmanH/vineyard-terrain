@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vineyard Terrain Analyzer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bg:#14171a; --panel:#1e2328; --text:#e8e6e3; --muted:#9aa0a6;
+          --accent:#7cb342; --warn:#ffb300; --line:#2a3036; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg);
+         color:var(--text); display:flex; height:100vh; }
+  #sidebar { width:340px; min-width:340px; background:var(--panel);
+             padding:16px; overflow-y:auto; }
+  #map { flex:1; }
+  h1 { font-size:17px; margin:0 0 12px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--muted); margin:18px 0 6px;
+       display:flex; justify-content:space-between; align-items:center; }
+  #drop { border:2px dashed #3a4046; border-radius:8px; padding:16px;
+          text-align:center; color:var(--muted); cursor:pointer; }
+  #drop.hover { border-color:var(--accent); color:var(--text); }
+  #drophint { font-size:12px; color:var(--muted); margin-top:6px; }
+  #banner { display:none; background:var(--warn); color:#000; border-radius:6px;
+            padding:8px 10px; margin:10px 0; font-size:13px; }
+  .row { display:flex; justify-content:space-between; padding:3px 0;
+         border-bottom:1px solid var(--line); }
+  .row span:last-child { font-variant-numeric:tabular-nums; }
+  .big { font-size:15px; font-weight:600; color:var(--accent); }
+  label.layer { display:block; padding:3px 0; cursor:pointer; }
+  input[type=range] { width:100%; }
+  #legend { height:14px; border-radius:4px; margin-top:6px; }
+  #legend-labels { display:flex; justify-content:space-between;
+                   color:var(--muted); font-size:12px; }
+  #status { color:var(--muted); font-size:13px; min-height:18px; margin-top:8px; }
+  /* blocks list */
+  .block { display:flex; align-items:center; gap:8px; padding:5px 0;
+           border-bottom:1px solid var(--line); }
+  .block.active { background:#232a31; margin:0 -6px; padding:5px 6px;
+                  border-radius:4px; border-bottom:1px solid var(--line); }
+  .block .name { flex:1; cursor:pointer; overflow:hidden;
+                 text-overflow:ellipsis; white-space:nowrap; }
+  .block .name small { color:var(--muted); }
+  .block .rm { color:var(--muted); cursor:pointer; border:none;
+               background:none; font-size:16px; line-height:1; padding:2px 4px; }
+  .block .rm:hover { color:#ff6b6b; }
+  .linkbtn { background:none; border:none; color:var(--accent); cursor:pointer;
+             font-size:12px; padding:0; text-transform:none; letter-spacing:0; }
+  .linkbtn:hover { text-decoration:underline; }
+  /* language toggle */
+  #topbar { display:flex; justify-content:space-between; align-items:flex-start;
+            gap:8px; }
+  #lang { display:flex; border:1px solid #3a4046; border-radius:6px;
+          overflow:hidden; flex-shrink:0; }
+  #lang button { background:none; border:none; color:var(--muted);
+                 font:600 12px system-ui; padding:4px 9px; cursor:pointer; }
+  #lang button.on { background:var(--accent); color:#0d1a05; }
+  /* Gurmukhi renders a touch small at body size; nudge it up for legibility */
+  :root[lang="pa"] body { font-size:14.5px; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div id="topbar">
+    <h1 data-i18n="title">Vineyard Terrain Analyzer</h1>
+    <div id="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en">EN</button>
+      <button type="button" data-lang="pa">ਪੰਜਾਬੀ</button>
+    </div>
+  </div>
+  <div id="drop" data-i18n="drop">Drop LidarBC .tif files here or click to choose</div>
+  <div id="drophint" data-i18n="drophint">Select several tiles at once to merge
+    them into one block. Load blocks one at a time to keep them side by side.</div>
+  <input id="file" type="file" accept=".tif,.tiff" multiple style="display:none">
+  <div id="status"></div>
+
+  <h2><span data-i18n="blocks">Blocks</span>
+    <button type="button" id="clear-all" class="linkbtn"
+            data-i18n="clearAll">Clear all</button></h2>
+  <div id="blocks"></div>
+
+  <div id="banner"></div>
+
+  <h2 data-i18n="analysisLayer">Analysis layer</h2>
+  <div id="layers"></div>
+
+  <div id="opacity-wrap">
+    <h2><span data-i18n="opacity">Overlay opacity</span> <span id="opv">75%</span></h2>
+    <input id="opacity" type="range" min="0" max="100" value="75">
+    <div style="color:var(--muted);font-size:12px" data-i18n="opacityHint">
+      0 = satellite only, 100 = analysis only</div>
+    <div id="legend"></div>
+    <div id="legend-labels"><span id="lg-min"></span><span id="lg-max"></span></div>
+  </div>
+
+  <h2><span data-i18n="siteStats">Site stats</span>
+    <span id="stats-for" style="color:var(--accent)"></span></h2>
+  <div id="stats"></div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+// ---------------------------------------------------------------- map setup
+const map = L.map("map", { zoomControl: true }).setView([49.3, -119.55], 11);
+L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Esri, Maxar, Earthstar Geographics" }
+).addTo(map);
+
+const LAYER_ORDER = ["suitability","frost","tpi","flowacc","slope",
+                     "aspect","hillshade","elevation"];
+
+// ---------------------------------------------------------------- i18n
+// Every user-facing string lives here keyed by language. Punjabi (Gurmukhi)
+// is a full translation; compass octants (N, SW, ...) stay as letters since
+// they are universal map shorthand. Aspect octants get a localized full name
+// only in the direction key labels below.
+const I18N = {
+  en: {
+    title: "Vineyard Terrain Analyzer",
+    drop: "Drop LidarBC .tif files here or click to choose",
+    drophint: "Select several tiles at once to merge them into one block. " +
+              "Load blocks one at a time to keep them side by side.",
+    blocks: "Blocks", clearAll: "Clear all",
+    noBlocks: "No blocks loaded yet.",
+    analysisLayer: "Analysis layer",
+    opacity: "Overlay opacity",
+    opacityHint: "0 = satellite only, 100 = analysis only",
+    siteStats: "Site stats",
+    startHint: "Upload a tile to begin. All results are relative terrain " +
+               "risk, not temperatures.",
+    processing: "Processing", done: "Done", failed: "Failed",
+    mergedBlock: "tiles (merged block)", tiles: "tiles",
+    showStats: "Show stats for this block", removeBlock: "Remove block",
+    validArea: "Valid area", noData: "NoData", elevation: "Elevation",
+    relief: "Relief", meanSlope: "Mean slope", coldAirPooling: "Cold-air pooling",
+    ofGround: "% of ground", strongSinks: "Strong sinks", plantAbove: "Plant above",
+    to: "to", suitabilityAreas: "Suitability areas",
+    aspectHeading: "Aspect (sloped ground)",
+    excellent: "excellent", good: "good", marginal: "marginal", avoid: "avoid",
+    disclaimer: "Relative terrain risk only. Absolute temperatures come from " +
+                "field sensors, not from this model.",
+    bannerDsm: "Surface model (DSM): treed areas exaggerate fine frost " +
+               "pockets. Upload the DTM twin of this block for reliable detail.",
+    bannerPartial: "Partial bare-earth coverage: DTM was only produced for " +
+                   "part of this block (normal for LidarBC valley products).",
+    layer: { suitability:"Suitability", frost:"Frost risk",
+      tpi:"Cold-air pooling (TPI)", flowacc:"Flow accumulation", slope:"Slope",
+      aspect:"Aspect", hillshade:"Hillshade", elevation:"Elevation" },
+  },
+  pa: {
+    title: "ਵਾਈਨਯਾਰਡ ਟੈਰੇਨ ਵਿਸ਼ਲੇਸ਼ਕ",
+    drop: "LidarBC .tif ਫ਼ਾਈਲਾਂ ਇੱਥੇ ਸੁੱਟੋ ਜਾਂ ਚੁਣਨ ਲਈ ਕਲਿੱਕ ਕਰੋ",
+    drophint: "ਇੱਕੋ ਬਲਾਕ ਵਿੱਚ ਮਿਲਾਉਣ ਲਈ ਕਈ ਟਾਈਲਾਂ ਇਕੱਠੀਆਂ ਚੁਣੋ। " +
+              "ਬਲਾਕਾਂ ਨੂੰ ਨਾਲੋ-ਨਾਲ ਰੱਖਣ ਲਈ ਇੱਕ-ਇੱਕ ਕਰਕੇ ਲੋਡ ਕਰੋ।",
+    blocks: "ਬਲਾਕ", clearAll: "ਸਾਰੇ ਹਟਾਓ",
+    noBlocks: "ਹਾਲੇ ਕੋਈ ਬਲਾਕ ਲੋਡ ਨਹੀਂ ਹੋਇਆ।",
+    analysisLayer: "ਵਿਸ਼ਲੇਸ਼ਣ ਪਰਤ",
+    opacity: "ਓਵਰਲੇ ਧੁੰਦਲਾਪਣ",
+    opacityHint: "0 = ਸਿਰਫ਼ ਸੈਟੇਲਾਈਟ, 100 = ਸਿਰਫ਼ ਵਿਸ਼ਲੇਸ਼ਣ",
+    siteStats: "ਸਾਈਟ ਅੰਕੜੇ",
+    startHint: "ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਇੱਕ ਟਾਈਲ ਅੱਪਲੋਡ ਕਰੋ। ਸਾਰੇ ਨਤੀਜੇ ਸਾਪੇਖ ਭੂਮੀ " +
+               "ਜੋਖਮ ਹਨ, ਤਾਪਮਾਨ ਨਹੀਂ।",
+    processing: "ਪ੍ਰਕਿਰਿਆ ਜਾਰੀ", done: "ਮੁਕੰਮਲ", failed: "ਅਸਫਲ",
+    mergedBlock: "ਟਾਈਲਾਂ (ਮਿਲਾਇਆ ਬਲਾਕ)", tiles: "ਟਾਈਲਾਂ",
+    showStats: "ਇਸ ਬਲਾਕ ਦੇ ਅੰਕੜੇ ਵੇਖੋ", removeBlock: "ਬਲਾਕ ਹਟਾਓ",
+    validArea: "ਵੈਧ ਖੇਤਰ", noData: "ਡਾਟਾ ਨਹੀਂ", elevation: "ਉਚਾਈ",
+    relief: "ਰਾਹਤ", meanSlope: "ਔਸਤ ਢਲਾਣ", coldAirPooling: "ਠੰਢੀ ਹਵਾ ਇਕੱਠੀ ਹੋਣਾ",
+    ofGround: "% ਜ਼ਮੀਨ", strongSinks: "ਗਹਿਰੇ ਟੋਏ", plantAbove: "ਇਸ ਤੋਂ ਉੱਪਰ ਲਾਓ",
+    to: "ਤੋਂ", suitabilityAreas: "ਯੋਗਤਾ ਖੇਤਰ",
+    aspectHeading: "ਦਿਸ਼ਾ (ਢਲਾਣ ਵਾਲੀ ਜ਼ਮੀਨ)",
+    excellent: "ਵਧੀਆ", good: "ਚੰਗਾ", marginal: "ਦਰਮਿਆਨਾ", avoid: "ਬਚੋ",
+    disclaimer: "ਸਿਰਫ਼ ਸਾਪੇਖ ਭੂਮੀ ਜੋਖਮ। ਅਸਲ ਤਾਪਮਾਨ ਖੇਤ ਦੇ ਸੈਂਸਰਾਂ ਤੋਂ ਆਉਂਦੇ ਹਨ, " +
+                "ਇਸ ਮਾਡਲ ਤੋਂ ਨਹੀਂ।",
+    bannerDsm: "ਸਤਹ ਮਾਡਲ (DSM): ਰੁੱਖਾਂ ਵਾਲੇ ਖੇਤਰ ਬਰੀਕ ਕੋਰੇ ਦੀਆਂ ਥਾਂਵਾਂ ਨੂੰ " +
+               "ਵਧਾ-ਚੜ੍ਹਾ ਕੇ ਵਿਖਾਉਂਦੇ ਹਨ। ਭਰੋਸੇਯੋਗ ਵੇਰਵੇ ਲਈ ਇਸ ਬਲਾਕ ਦੀ DTM ਜੋੜੀ ਅੱਪਲੋਡ ਕਰੋ।",
+    bannerPartial: "ਅਧੂਰੀ ਨੰਗੀ-ਜ਼ਮੀਨ ਕਵਰੇਜ: DTM ਸਿਰਫ਼ ਇਸ ਬਲਾਕ ਦੇ ਹਿੱਸੇ ਲਈ ਬਣਾਇਆ " +
+                   "ਗਿਆ ਸੀ (LidarBC ਘਾਟੀ ਉਤਪਾਦਾਂ ਲਈ ਆਮ)।",
+    layer: { suitability:"ਯੋਗਤਾ", frost:"ਕੋਰੇ ਦਾ ਖ਼ਤਰਾ",
+      tpi:"ਠੰਢੀ ਹਵਾ ਇਕੱਠੀ ਹੋਣਾ (TPI)", flowacc:"ਵਹਾਅ ਇਕੱਠਾ", slope:"ਢਲਾਣ",
+      aspect:"ਦਿਸ਼ਾ", hillshade:"ਪਹਾੜੀ ਛਾਂ", elevation:"ਉਚਾਈ" },
+  },
+};
+
+let lang = "en";
+function t(key) { return (I18N[lang] && I18N[lang][key]) ?? I18N.en[key] ?? key; }
+function layerName(l) {
+  return (I18N[lang].layer && I18N[lang].layer[l]) || I18N.en.layer[l] || l;
+}
+const LEGEND_CSS = {
+  tpi:"linear-gradient(90deg,#b2182b,#f7f7f7,#2166ac)",
+  slope:"linear-gradient(90deg,#000004,#51127c,#b73779,#fc8961,#fcfdbf)",
+  elevation:"linear-gradient(90deg,#333399,#00b2b2,#ffff99,#996633,#ffffff)",
+  hillshade:"linear-gradient(90deg,#000,#fff)",
+  aspect:"linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta,red)",
+  frost:"linear-gradient(90deg,#1a9850,#fee08b,#d73027)",
+  suitability:"linear-gradient(90deg,#d73027,#fee08b,#1a9850)",
+  flowacc:"linear-gradient(90deg,#f7fbff,#6baed6,#08306b)" };
+
+const STORE_KEY = "vta_blocks_v1";
+const LANG_KEY = "vta_lang_v1";
+// blocks: id -> { job, overlay, visible }. job is the /api/jobs payload.
+const blocks = new Map();
+let currentLayer = "suitability";   // shared metric across all blocks
+let activeId = null;                // block driving the stats sidebar
+
+// ---------------------------------------------------------------- language
+function applyLang() {
+  document.documentElement.setAttribute("lang", lang);
+  // static elements carrying a data-i18n key
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  // toggle button highlight
+  document.querySelectorAll("#lang button").forEach(b =>
+    b.classList.toggle("on", b.dataset.lang === lang));
+  // dynamic panels: re-render whatever is currently shown
+  document.getElementById("opv").textContent = slider.value + "%";
+  if (blocks.size && activeId) {
+    renderBlockList(); renderBanner(blocks.get(activeId).job);
+    renderLayerPicker(blocks.get(activeId).job);
+    renderStats(blocks.get(activeId).job);
+  } else {
+    renderBlockList(); clearAnalysisPanels();
+  }
+}
+function setLang(next) {
+  lang = (next === "pa") ? "pa" : "en";
+  localStorage.setItem(LANG_KEY, lang);
+  applyLang();
+}
+document.querySelectorAll("#lang button").forEach(b =>
+  b.onclick = () => setLang(b.dataset.lang));
+
+// ---------------------------------------------------------------- persistence
+function saveBlocks() {
+  const ids = [...blocks.keys()];
+  const vis = {}; blocks.forEach((b, id) => vis[id] = b.visible);
+  localStorage.setItem(STORE_KEY, JSON.stringify(
+    { ids, visible: vis, layer: currentLayer, active: activeId }));
+}
+async function restoreBlocks() {
+  let saved; try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); }
+  catch { saved = null; }
+  if (!saved || !saved.ids || !saved.ids.length) return;
+  currentLayer = saved.layer || currentLayer;
+  for (const id of saved.ids) {
+    try {
+      const job = await fetchJob(id);       // 404 if the server dropped it
+      addBlock(job, saved.visible[id] !== false, false);
+    } catch { /* stale id; skip */ }
+  }
+  if (saved.active && blocks.has(saved.active)) setActive(saved.active);
+  else if (blocks.size) setActive([...blocks.keys()][0]);
+  fitAll();
+  saveBlocks();
+}
+
+// ---------------------------------------------------------------- upload ui
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const statusEl = document.getElementById("status");
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("hover"); };
+drop.ondragleave = () => drop.classList.remove("hover");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("hover");
+  if (e.dataTransfer.files.length) upload(e.dataTransfer.files); };
+fileInput.onchange = () => { if (fileInput.files.length) upload(fileInput.files);
+                             fileInput.value = ""; };
+
+async function upload(fileList) {
+  const files = [...fileList];
+  const label = files.length === 1 ? files[0].name
+                                    : files.length + " " + t("mergedBlock");
+  statusEl.textContent = t("processing") + " " + label + " ...";
+  const fd = new FormData();
+  files.forEach(f => fd.append("file", f));
+  try {
+    const r = await fetch("/api/upload", { method:"POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const { job_id } = await r.json();
+    const job = await fetchJob(job_id);
+    addBlock(job, true, true);
+    setActive(job_id);
+    fitAll();
+    saveBlocks();
+    statusEl.textContent = t("done") + ": " + label;
+  } catch (err) { statusEl.textContent = t("failed") + ": " + err.message; }
+}
+
+async function fetchJob(id) {
+  const r = await fetch("/api/jobs/" + id);
+  if (!r.ok) throw new Error("job " + id + " not found");
+  return r.json();
+}
+
+// ---------------------------------------------------------------- blocks
+function blockLabel(job) {
+  const f = job.meta.filename;
+  const base = Array.isArray(f) ? f.length + " " + t("tiles") : f;
+  return base.replace(/\.(tif|tiff)$/i, "");
+}
+
+function overlayUrl(job, layer) {
+  const use = job.layers.includes(layer) ? layer
+    : (LAYER_ORDER.find(l => job.layers.includes(l)) || job.layers[0]);
+  return "/output/" + job.meta.job_id + "/layers/" + use + ".png";
+}
+
+function addBlock(job, visible, isNew) {
+  const id = job.meta.job_id;
+  if (blocks.has(id)) removeBlock(id, false);   // replace if reloaded
+  const b = job.bounds;
+  const overlay = L.imageOverlay(overlayUrl(job, currentLayer),
+    [[b.south, b.west], [b.north, b.east]],
+    { opacity: slider.value / 100, interactive: true });
+  overlay.on("click", () => setActive(id));
+  if (visible) overlay.addTo(map);
+  blocks.set(id, { job, overlay, visible });
+  renderBlockList();
+}
+
+function removeBlock(id, persist=true) {
+  const blk = blocks.get(id);
+  if (!blk) return;
+  map.removeLayer(blk.overlay);
+  blocks.delete(id);
+  fetch("/api/jobs/" + id, { method:"DELETE" }).catch(()=>{});
+  if (activeId === id) activeId = null;
+  if (!activeId && blocks.size) setActive([...blocks.keys()][0]);
+  if (!blocks.size) clearAnalysisPanels();
+  renderBlockList();
+  if (persist) saveBlocks();
+}
+
+function toggleBlock(id, visible) {
+  const blk = blocks.get(id); if (!blk) return;
+  blk.visible = visible;
+  if (visible) blk.overlay.addTo(map); else map.removeLayer(blk.overlay);
+  saveBlocks();
+}
+
+function setActive(id) {
+  activeId = id;
+  const blk = blocks.get(id); if (!blk) return;
+  renderBlockList();
+  renderBanner(blk.job);
+  renderLayerPicker(blk.job);
+  renderStats(blk.job);
+  updateLegend(blk.job);
+}
+
+function renderBlockList() {
+  const holder = document.getElementById("blocks");
+  if (!blocks.size) {
+    holder.innerHTML = "<span style='color:var(--muted);font-size:13px'>" +
+      t("noBlocks") + "</span>";
+    return;
+  }
+  holder.innerHTML = "";
+  blocks.forEach((blk, id) => {
+    const el = document.createElement("div");
+    el.className = "block" + (id === activeId ? " active" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = blk.visible;
+    cb.onchange = () => toggleBlock(id, cb.checked);
+    const name = document.createElement("div");
+    name.className = "name";
+    const ha = blk.job.stats.coverage.valid_ha;
+    name.innerHTML = blockLabel(blk.job) + " <small>" + ha + " ha</small>";
+    name.title = t("showStats");
+    name.onclick = () => setActive(id);
+    const rm = document.createElement("button");
+    rm.className = "rm"; rm.textContent = "×"; rm.title = t("removeBlock");
+    rm.onclick = () => removeBlock(id);
+    el.append(cb, name, rm);
+    holder.appendChild(el);
+  });
+}
+
+document.getElementById("clear-all").onclick = () => {
+  [...blocks.keys()].forEach(id => removeBlock(id, false));
+  activeId = null; clearAnalysisPanels(); saveBlocks();
+};
+
+function fitAll() {
+  const vis = [...blocks.values()].filter(b => b.visible);
+  if (!vis.length) return;
+  let s=90,w=180,n=-90,e=-180;
+  vis.forEach(({job}) => { const b=job.bounds;
+    s=Math.min(s,b.south); w=Math.min(w,b.west);
+    n=Math.max(n,b.north); e=Math.max(e,b.east); });
+  map.fitBounds([[s,w],[n,e]], { padding:[20,20] });
+}
+
+// ------------------------------------------------------------- analysis view
+function renderBanner(job) {
+  const el = document.getElementById("banner");
+  const f = job.stats.flags || {};
+  if (f.canopy_caveat) {
+    el.style.display = "block";
+    el.textContent = t("bannerDsm");
+  } else if (f.partial_dtm) {
+    el.style.display = "block";
+    el.textContent = t("bannerPartial");
+  } else { el.style.display = "none"; }
+}
+
+function renderLayerPicker(job) {
+  const holder = document.getElementById("layers");
+  holder.innerHTML = "";
+  // union of layers across all blocks, in priority order
+  const present = new Set();
+  blocks.forEach(b => b.job.layers.forEach(l => present.add(l)));
+  LAYER_ORDER.filter(l => present.has(l)).forEach(l => {
+    const lab = document.createElement("label");
+    lab.className = "layer";
+    lab.innerHTML = `<input type="radio" name="layer" value="${l}"${
+      l === currentLayer ? " checked" : ""}> ${layerName(l)}`;
+    lab.querySelector("input").onchange = () => setLayer(l);
+    holder.appendChild(lab);
+  });
+}
+
+// switching the metric applies to EVERY block so they stay comparable
+function setLayer(name) {
+  currentLayer = name;
+  blocks.forEach(({ job, overlay }) => overlay.setUrl(overlayUrl(job, name)));
+  const radio = document.querySelector(`input[value="${name}"]`);
+  if (radio) radio.checked = true;
+  if (activeId) updateLegend(blocks.get(activeId).job);
+  saveBlocks();
+}
+
+function updateLegend(job) {
+  document.getElementById("legend").style.background =
+    LEGEND_CSS[currentLayer] || "";
+  const lg = (job.stats.legends || {})[currentLayer] || {};
+  document.getElementById("lg-min").textContent = lg.vmin ?? "";
+  document.getElementById("lg-max").textContent = lg.vmax ?? "";
+}
+
+// ---------------------------------------------------------------- opacity
+const slider = document.getElementById("opacity");
+slider.oninput = () => {
+  document.getElementById("opv").textContent = slider.value + "%";
+  blocks.forEach(b => b.overlay.setOpacity(slider.value / 100));
+};
+
+// ---------------------------------------------------------------- stats
+function row(k, v, big=false) {
+  return `<div class="row"><span>${k}</span>` +
+         `<span class="${big?"big":""}">${v}</span></div>`;
+}
+function clearAnalysisPanels() {
+  document.getElementById("banner").style.display = "none";
+  document.getElementById("layers").innerHTML = "";
+  document.getElementById("legend").style.background = "";
+  document.getElementById("lg-min").textContent = "";
+  document.getElementById("lg-max").textContent = "";
+  document.getElementById("stats-for").textContent = "";
+  document.getElementById("stats").innerHTML =
+    "<span style='color:var(--muted)'>" + t("startHint") + "</span>";
+}
+function renderStats(job) {
+  const s = job.stats, el = document.getElementById("stats");
+  document.getElementById("stats-for").textContent = blockLabel(job);
+  let h = "";
+  h += row(t("validArea"), s.coverage.valid_ha + " ha / " +
+           s.coverage.valid_acres + " ac", true);
+  h += row(t("noData"), s.coverage.nodata_pct + "%");
+  h += row(t("elevation"),
+           s.elevation.min + " " + t("to") + " " + s.elevation.max + " m");
+  h += row(t("relief"), s.elevation.relief_m + " m");
+  h += row(t("meanSlope"), s.slope_pct.mean + "%");
+  h += row(t("coldAirPooling"),
+           s.pooling["pct_lt_-0.5"] + t("ofGround"), true);
+  h += row(t("strongSinks"), s.pooling["pct_lt_-1.0"] + "%");
+  if (s.plant_above_m !== null && s.plant_above_m !== undefined)
+    h += row(t("plantAbove"), "~" + s.plant_above_m + " m", true);
+  if (s.suitability_areas_ha) {
+    h += "<h2>" + t("suitabilityAreas") + "</h2>";
+    const ac = s.suitability_areas_acres || {};
+    for (const [k, v] of Object.entries(s.suitability_areas_ha))
+      h += row(t(k), v + " ha" + (ac[k] !== undefined ? " / " + ac[k] + " ac" : ""));
+  }
+  const a = s.aspect_distribution_pct || {};
+  h += "<h2>" + t("aspectHeading") + "</h2>";
+  ["S","SW","SE","W","E","N","NE","NW"].forEach(d => {
+    if (a[d] !== undefined) h += row(d, a[d] + "%");
+  });
+  h += `<div style="color:var(--muted);font-size:12px;margin-top:10px">` +
+       t("disclaimer") + `</div>`;
+  el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------- boot
+lang = (localStorage.getItem(LANG_KEY) === "pa") ? "pa" : "en";
+applyLang();      // sets static text + empty-state panels in the saved language
+restoreBlocks();  // re-renders dynamic panels once jobs load
+</script>
+</body>
+</html>
