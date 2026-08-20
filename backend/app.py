@@ -5,19 +5,44 @@ import re
 import uuid
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .pipeline import run as pipeline_run
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOADS = os.path.join(ROOT, "uploads")
-OUTPUT = os.path.join(ROOT, "output")
+# VTA_DATA_DIR points uploads/ and output/ at a mounted volume when the app
+# runs in a container. Falls back to the repo folders for local development.
+DATA = os.environ.get("VTA_DATA_DIR") or ROOT
+UPLOADS = os.path.join(DATA, "uploads")
+OUTPUT = os.path.join(DATA, "output")
 FRONTEND = os.path.join(ROOT, "frontend")
 os.makedirs(UPLOADS, exist_ok=True)
 os.makedirs(OUTPUT, exist_ok=True)
 
 app = FastAPI(title="Vineyard Terrain Analyzer")
+
+# The static frontend is served from the vineyard site (hbbrosvineyards.com
+# /frost) while this API runs on its own host, so browsers send cross-origin
+# requests. VTA_ALLOWED_ORIGINS is a comma-separated allowlist; unset means
+# same-origin only, which is what local development wants.
+_origins = [o.strip() for o in
+            os.environ.get("VTA_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if _origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+
+@app.get("/api/health")
+def health():
+    """Liveness probe for the container host, and the check the /frost page
+    uses to tell the visitor whether the analysis service is reachable."""
+    return {"ok": True, "jobs": len(os.listdir(OUTPUT))}
 
 
 @app.post("/api/upload")

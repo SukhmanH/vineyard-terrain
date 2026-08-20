@@ -26,6 +26,20 @@ LAYER_SPECS = [
 
 
 def run(tif_paths, out_dir, boundary=None):
+    """Analyze a tile or mosaic, always clearing intermediates afterwards.
+
+    The hydrology and mosaic scratch dirs are large: a failed five-tile job
+    left 2 GB of _hydro behind. Cleanup runs in a finally so a crash cannot
+    fill the disk on a long-lived server.
+    """
+    try:
+        return _run(tif_paths, out_dir, boundary=boundary)
+    finally:
+        shutil.rmtree(os.path.join(out_dir, "_hydro"), ignore_errors=True)
+        shutil.rmtree(os.path.join(out_dir, "_mosaic"), ignore_errors=True)
+
+
+def _run(tif_paths, out_dir, boundary=None):
     """Analyze one tile or a mosaic of tiles into a job folder.
 
     tif_paths: a single path (str) or a list of paths. Multiple tiles are
@@ -123,10 +137,6 @@ def run(tif_paths, out_dir, boundary=None):
     }
     with open(os.path.join(out_dir, "stats.json"), "w") as f:
         json.dump(stats, f, indent=2)
-
-    # drop intermediates; the layer PNGs are the kept products
-    shutil.rmtree(hydro_dir, ignore_errors=True)
-    shutil.rmtree(mosaic_dir, ignore_errors=True)
 
     names = [os.path.basename(p) for p in tif_paths]
     meta_out = {

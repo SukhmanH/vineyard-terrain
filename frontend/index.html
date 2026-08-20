@@ -58,6 +58,10 @@
   #lang button.on { background:var(--accent); color:#0d1a05; }
   /* Gurmukhi renders a touch small at body size; nudge it up for legibility */
   :root[lang="pa"] body { font-size:14.5px; }
+  #drop.offline { opacity:.45; cursor:not-allowed; border-style:solid; }
+  .offline-note { border-left:3px solid var(--warn); background:rgba(255,179,0,.10);
+                  color:var(--warn); padding:8px 10px; margin-top:8px;
+                  border-radius:3px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -124,6 +128,8 @@ const I18N = {
     drop: "Drop LidarBC .tif files here or click to choose",
     drophint: "Select several tiles at once to merge them into one block. " +
               "Load blocks one at a time to keep them side by side.",
+    offline: "Analysis service offline. The map and satellite imagery work, " +
+             "but new tiles cannot be processed until the service is back.",
     blocks: "Blocks", clearAll: "Clear all",
     noBlocks: "No blocks loaded yet.",
     analysisLayer: "Analysis layer",
@@ -156,6 +162,8 @@ const I18N = {
     drop: "LidarBC .tif ਫ਼ਾਈਲਾਂ ਇੱਥੇ ਸੁੱਟੋ ਜਾਂ ਚੁਣਨ ਲਈ ਕਲਿੱਕ ਕਰੋ",
     drophint: "ਇੱਕੋ ਬਲਾਕ ਵਿੱਚ ਮਿਲਾਉਣ ਲਈ ਕਈ ਟਾਈਲਾਂ ਇਕੱਠੀਆਂ ਚੁਣੋ। " +
               "ਬਲਾਕਾਂ ਨੂੰ ਨਾਲੋ-ਨਾਲ ਰੱਖਣ ਲਈ ਇੱਕ-ਇੱਕ ਕਰਕੇ ਲੋਡ ਕਰੋ।",
+    offline: "ਵਿਸ਼ਲੇਸ਼ਣ ਸੇਵਾ ਬੰਦ ਹੈ। ਨਕਸ਼ਾ ਅਤੇ ਸੈਟੇਲਾਈਟ ਤਸਵੀਰਾਂ ਚੱਲਦੀਆਂ ਹਨ, " +
+             "ਪਰ ਸੇਵਾ ਵਾਪਸ ਆਉਣ ਤੱਕ ਨਵੀਆਂ ਟਾਈਲਾਂ ਪ੍ਰੋਸੈਸ ਨਹੀਂ ਹੋ ਸਕਦੀਆਂ।",
     blocks: "ਬਲਾਕ", clearAll: "ਸਾਰੇ ਹਟਾਓ",
     noBlocks: "ਹਾਲੇ ਕੋਈ ਬਲਾਕ ਲੋਡ ਨਹੀਂ ਹੋਇਆ।",
     analysisLayer: "ਵਿਸ਼ਲੇਸ਼ਣ ਪਰਤ",
@@ -200,6 +208,14 @@ const LEGEND_CSS = {
   suitability:"linear-gradient(90deg,#d73027,#fee08b,#1a9850)",
   flowacc:"linear-gradient(90deg,#f7fbff,#6baed6,#08306b)" };
 
+// Analysis backend. Empty = same origin, which is the case when this page is
+// served by the FastAPI app itself (local development). Deployed as a static
+// page on the vineyard site, the API lives on its own host, so the base URL
+// comes from a head meta tag named vta-api-base. Keeping it in the markup
+// means the deployed copy is retargeted without touching this script.
+const API = (document.querySelector('meta[name="vta-api-base"]')?.content || "")
+              .replace(/\/+$/, "");
+
 const STORE_KEY = "vta_blocks_v1";
 const LANG_KEY = "vta_lang_v1";
 // blocks: id -> { job, overlay, visible }. job is the /api/jobs payload.
@@ -219,6 +235,7 @@ function applyLang() {
     b.classList.toggle("on", b.dataset.lang === lang));
   // dynamic panels: re-render whatever is currently shown
   document.getElementById("opv").textContent = slider.value + "%";
+  renderOffline();
   if (blocks.size && activeId) {
     renderBlockList(); renderBanner(blocks.get(activeId).job);
     renderLayerPicker(blocks.get(activeId).job);
@@ -279,7 +296,7 @@ async function upload(fileList) {
   const fd = new FormData();
   files.forEach(f => fd.append("file", f));
   try {
-    const r = await fetch("/api/upload", { method:"POST", body: fd });
+    const r = await fetch(API + "/api/upload", { method:"POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const { job_id } = await r.json();
     const job = await fetchJob(job_id);
@@ -292,7 +309,7 @@ async function upload(fileList) {
 }
 
 async function fetchJob(id) {
-  const r = await fetch("/api/jobs/" + id);
+  const r = await fetch(API + "/api/jobs/" + id);
   if (!r.ok) throw new Error("job " + id + " not found");
   return r.json();
 }
@@ -307,7 +324,7 @@ function blockLabel(job) {
 function overlayUrl(job, layer) {
   const use = job.layers.includes(layer) ? layer
     : (LAYER_ORDER.find(l => job.layers.includes(l)) || job.layers[0]);
-  return "/output/" + job.meta.job_id + "/layers/" + use + ".png";
+  return API + "/output/" + job.meta.job_id + "/layers/" + use + ".png";
 }
 
 function addBlock(job, visible, isNew) {
@@ -328,7 +345,7 @@ function removeBlock(id, persist=true) {
   if (!blk) return;
   map.removeLayer(blk.overlay);
   blocks.delete(id);
-  fetch("/api/jobs/" + id, { method:"DELETE" }).catch(()=>{});
+  fetch(API + "/api/jobs/" + id, { method:"DELETE" }).catch(()=>{});
   if (activeId === id) activeId = null;
   if (!activeId && blocks.size) setActive([...blocks.keys()][0]);
   if (!blocks.size) clearAnalysisPanels();
@@ -498,9 +515,32 @@ function renderStats(job) {
 }
 
 // ---------------------------------------------------------------- boot
+// Served statically from the vineyard site, this page outlives any given
+// backend. Probe once so a visitor is told the analysis service is down
+// instead of watching an upload fail with no explanation.
+let backendOffline = false;
+function renderOffline() {
+  if (backendOffline)
+    statusEl.innerHTML = `<div class="offline-note">${t("offline")}</div>`;
+}
+
+async function checkBackend() {
+  try {
+    const r = await fetch(API + "/api/health", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.statusText);
+    return true;
+  } catch {
+    backendOffline = true;
+    drop.classList.add("offline");
+    drop.onclick = null;
+    renderOffline();
+    return false;
+  }
+}
+
 lang = (localStorage.getItem(LANG_KEY) === "pa") ? "pa" : "en";
 applyLang();      // sets static text + empty-state panels in the saved language
-restoreBlocks();  // re-renders dynamic panels once jobs load
+checkBackend().then(ok => { if (ok) restoreBlocks(); });
 </script>
 </body>
 </html>
