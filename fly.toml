@@ -1,0 +1,37 @@
+# Fly.io deployment for the Vineyard Terrain Analyzer API.
+#   fly launch --no-deploy --name frost-api
+#   fly volumes create vta_data --size 10 --region sea
+#   fly secrets set VTA_ALLOWED_ORIGINS="https://hbbrosvineyards.com"
+#   fly deploy
+app = "frost-api"
+primary_region = "sea"          # Seattle, closest to the Okanagan
+
+[build]
+
+[env]
+  VTA_DATA_DIR = "/data"
+
+[[mounts]]
+  source = "vta_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Analysis is CPU-bound and takes tens of seconds; keep one machine warm so
+  # an upload never pays a cold start on top of that.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 4
+    soft_limit = 2
+
+[[vm]]
+  # The pipeline holds several float32 arrays of a ~1900x1480 grid at once, and
+  # mosaics multiply that. 2 GB is the floor; 4 GB if you merge many tiles.
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 2

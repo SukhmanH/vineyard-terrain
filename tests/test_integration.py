@@ -91,3 +91,27 @@ def test_unknown_suffix_flags_canopy_caveat(tmp_path):
     stats = run.run(str(tif), str(out_dir))
     assert stats["flags"]["is_dsm"] is True
     assert stats["flags"]["canopy_caveat"] is True
+
+
+def test_failed_run_still_clears_intermediates(tmp_path, monkeypatch):
+    """A crash mid-pipeline must not strand the hydrology scratch dir.
+
+    Regression guard: a real five-tile job that died partway left 2 GB of
+    _hydro behind, which would fill the volume on a long-lived server.
+    """
+    tif = tmp_path / "crash_dtm.tif"
+    _write_synthetic_dtm(str(tif))
+    out_dir = tmp_path / "job"
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated pipeline failure")
+
+    # Crash at the render stage, which runs after hydrology has written the
+    # scratch dir. Failing earlier would pass trivially, since _hydro would
+    # not exist yet.
+    monkeypatch.setattr(run.render, "warp_to_web", boom)
+
+    with pytest.raises(RuntimeError, match="simulated pipeline failure"):
+        run.run(str(tif), str(out_dir))
+
+    assert not (out_dir / "_hydro").exists()
