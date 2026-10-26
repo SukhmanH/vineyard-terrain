@@ -60,6 +60,54 @@ docker run -p 8000:8000 -v frost-data:/data \
   -e VTA_ALLOWED_ORIGINS="https://hbbrosvineyards.com" frost-api
 ```
 
+## Beside Hermes on `vineyard` (no container)
+
+The parcel API for Hermes runs on the Hermes host itself as a systemd **user**
+service next to `hermes-gateway`, reachable on the tailnet only
+(`100.71.243.94:8000`). That box is a Core 2 Duo E8400 with no SSE4.2, so
+PyPI's numpy and scipy wheels, built for newer CPUs, can die there with
+"Illegal instruction". The scientific stack comes from Ubuntu's packages (built
+for the generic x86-64 baseline) and pip adds only `whitebox`, held to those
+versions by `deploy/constraints-core2.txt`.
+
+```sh
+sudo apt install python3-venv python3-numpy python3-scipy python3-rasterio \
+  python3-matplotlib python3-shapely python3-fastapi python3-uvicorn python3-multipart
+git clone -b parcel-frost vineyard-terrain.bundle ~/vineyard-terrain   # or a git remote
+cd ~/vineyard-terrain
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -c deploy/constraints-core2.txt whitebox pytest
+.venv/bin/python -c "import whitebox; whitebox.WhiteboxTools().version()"  # fetches the binary once
+.venv/bin/python -m pytest -q        # must pass, Whitebox included, before the service starts
+
+install -d -m 700 ~/.config/frost-api ~/frost-data
+cat > ~/.config/frost-api/env <<EOF   # chmod 600; the token also goes in Hermes' FROST_API_TOKEN
+VTA_API_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+VTA_DATA_DIR=$HOME/frost-data
+VTA_MAP_BASE_URL=http://100.71.243.94:8000
+VTA_TILE_CACHE_MB=10000
+VTA_WBT_MAX_PROCS=1
+EOF
+chmod 600 ~/.config/frost-api/env
+VTA_DATA_DIR=~/frost-data .venv/bin/python -m backend.pipeline.tiles refresh --sheet 082e
+cp deploy/frost-api.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now frost-api
+curl -s http://100.71.243.94:8000/api/health
+```
+
+The unit runs at `Nice=19`, `CPUWeight=10`, an idle I/O class and
+`MemoryMax=3G`, so the gateway and local transcription always come first. It
+binds the tailnet address, which exists only once `tailscaled` is up; until
+then the bind fails and systemd retries every 10 s. Logs:
+`journalctl --user -u frost-api -f`.
+
+WhiteboxTools runs on one thread there (`VTA_WBT_MAX_PROCS=1`): on this
+2-core box v2.4.0's FillDepressions panicked about 1 run in 30 on two threads
+and never on one, and the host's test suite failed a different routing test on
+every run until it was capped.
+To update: copy a new bundle, `git pull` in `~/vineyard-terrain`, then
+`systemctl --user restart frost-api` (unfinished jobs are re-queued).
+
 ## Configuration
 
 | Variable               | Default        | Purpose                                                                                   |
@@ -72,6 +120,7 @@ docker run -p 8000:8000 -v frost-data:/data \
 | `VTA_TILE_CACHE_MB`    | `4000`         | Size cap of the downloaded tile cache; least recently used tiles are dropped first. |
 | `VTA_PARCEL_BUFFER_M`  | `1000`         | Default AOI buffer around a parcel (a request's `buffer_m` overrides it). |
 | `VTA_GIT_SHA`          | `git rev-parse` | Commit recorded in each parcel job's provenance; set it where there is no `.git`. |
+| `VTA_WBT_MAX_PROCS`    | Whitebox's own | Caps WhiteboxTools' threads, re-applied every job (Whitebox stores it in its `settings.json`). `1` on `vineyard`. |
 
 `GET /api/health` returns `{"ok": true, "jobs": N, "frost_model": "v2",
 "model_version": "v2+z1", "parcel_jobs": true}`. The container healthcheck

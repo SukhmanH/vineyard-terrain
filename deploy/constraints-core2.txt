@@ -1,0 +1,18 @@
+# The `vineyard` host is a Core 2 Duo E8400 with no SSE4.2 or POPCNT. Its scientific stack
+# comes from Ubuntu 26.04's packages (built for the generic x86-64 baseline) through a
+# venv made with --system-site-packages. These pins stop pip from ever swapping one of them
+# for a PyPI wheel built for newer CPUs. Never `pip install -r requirements.txt` on that
+# host; add a package only as:
+#     .venv/bin/pip install -c deploy/constraints-core2.txt <package>
+# Versions as installed on 2026-10-26 (dpkg python3-<name>).
+numpy==2.3.5
+scipy==1.16.3
+rasterio==1.5.0
+matplotlib==3.10.7+dfsg1
+shapely==2.1.2
+fastapi==0.118.0
+starlette==0.50.0
+pydantic==2.12.5
+pydantic-core==2.41.5
+uvicorn==0.38.0
+python-multipart==0.0.20

@@ -1,0 +1,32 @@
+# systemd USER unit: the frost API beside Hermes on the `vineyard` host (see DEPLOY.md).
+#   install: cp deploy/frost-api.service ~/.config/systemd/user/
+#            systemctl --user daemon-reload && systemctl --user enable --now frost-api
+#   logs:    journalctl --user -u frost-api -f
+# Needs lingering (loginctl enable-linger) so it runs without a login, as hermes-gateway does.
+
+[Unit]
+Description=vineyard-terrain frost API (parcel frost scores for Hermes)
+# the tailnet address appears only once tailscaled is up; until then the bind fails and
+# Restart= tries again, without the default start-rate limit giving up
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h/vineyard-terrain
+# VTA_API_TOKEN, VTA_DATA_DIR, VTA_MAP_BASE_URL, VTA_TILE_CACHE_MB (mode 600)
+EnvironmentFile=%h/.config/frost-api/env
+Environment=PYTHONUNBUFFERED=1
+# ONE process: the parcel-job queue lives inside it
+ExecStart=%h/vineyard-terrain/.venv/bin/python -m uvicorn backend.app:app --host 100.71.243.94 --port 8000
+Restart=always
+RestartSec=10
+# Hermes (the gateway, local transcription) always wins the CPU, the disk and the memory.
+# The user manager delegates only cpu, memory and pids, so the disk share is the process's
+# own idle I/O class rather than an IOWeight.
+Nice=19
+CPUWeight=10
+IOSchedulingClass=idle
+MemoryMax=3G
+
+[Install]
+WantedBy=default.target
