@@ -1,0 +1,130 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "WHSE_CADASTRE.PMBC_PARCEL_POLY_SV.fid--4025175d_1a1763ffa2b_2ad5",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1466125.2,
+       523004.6
+      ],
+      [
+       1466125.3,
+       523002.6
+      ],
+      [
+       1466131.3,
+       523003.1
+      ],
+      [
+       1466130.8,
+       523009.1
+      ],
+      [
+       1466055.7,
+       523002.7
+      ],
+      [
+       1466051.7,
+       523005.2
+      ],
+      [
+       1466049.2,
+       523031.5
+      ],
+      [
+       1466045.2,
+       523031.1
+      ],
+      [
+       1466047.9,
+       523002.9
+      ],
+      [
+       1466054.7,
+       522998.6
+      ],
+      [
+       1466125.2,
+       523004.6
+      ]
+     ]
+    ]
+   },
+   "geometry_name": "SHAPE",
+   "properties": {
+    "PMBC_PP_SYSID": 4767574,
+    "PARCEL_NAME": "Statutory RoW",
+    "PLAN_NUMBER": "EPP74879",
+    "PID": null,
+    "PID_FORMATTED": null,
+    "PARCEL_STATUS": "Active",
+    "PARCEL_CLASS": "Interest",
+    "OWNER_TYPE": "Unclassified",
+    "MUNICIPALITY": "Penticton, The Corporation of the City of",
+    "FEATURE_AREA_SQM": 451.1001,
+    "OBJECTID": 203433729
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "WHSE_CADASTRE.PMBC_PARCEL_POLY_SV.fid--4025175d_1a1763ffa2b_2ad6",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1466045.2,
+       523031.1
+      ],
+      [
+       1466049.2,
+       523031.5
+      ],
+      [
+       1466048.5,
+       523037.4
+      ],
+      [
+       1465915.1,
+       523024.9
+      ],
+      [
+       1465915.6,
+       523018.9
+      ],
+      [
+       1465933.2,
+       523020.6
+      ],
+      [
+       1466045.2,
+       523031.1
+      ]
+     ]
+    ]
+   },
+   "geometry_name": "SHAPE",
+   "properties": {
+    "PMBC_PP_SYSID": 1301026,
+    "PARCEL_NAME": "Statutory RoW",
+    "PLAN_NUMBER": "EPP74879",
+    "PID": null,
+    "PID_FORMATTED": null,
+    "PARCEL_STATUS": "Active",
+    "PARCEL_CLASS": "Interest",
+    "OWNER_TYPE": "Unclassified",
+    "MUNICIPALITY": "Penticton, The Corporation of the City of",
+    "FEATURE_AREA_SQM": 792.1824,
+    "OBJECTID": 202012428
+   }
+  }
+ ],
+ "numberMatched": 2,
+ "numberReturned": 2,
+ "timeStamp": "2026-10-26T03:58:14.768Z"
+}

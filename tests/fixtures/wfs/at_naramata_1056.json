@@ -1,0 +1,101 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "WHSE_CADASTRE.PMBC_PARCEL_POLY_SV.fid-2e756e83_1a176400aa3_27bd",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1465917.7,
+       522814.4
+      ],
+      [
+       1465722.8,
+       522796.6
+      ],
+      [
+       1465720.3,
+       522796.4
+      ],
+      [
+       1465747.0,
+       522703.0
+      ],
+      [
+       1465787.7,
+       522714.6
+      ],
+      [
+       1465811.1,
+       522632.6
+      ],
+      [
+       1465770.3,
+       522621.0
+      ],
+      [
+       1465776.2,
+       522600.5
+      ],
+      [
+       1465965.5,
+       522617.8
+      ],
+      [
+       1465964.7,
+       522625.9
+      ],
+      [
+       1465973.7,
+       522658.5
+      ],
+      [
+       1465969.2,
+       522673.2
+      ],
+      [
+       1465971.8,
+       522689.1
+      ],
+      [
+       1465927.2,
+       522750.7
+      ],
+      [
+       1465923.3,
+       522761.7
+      ],
+      [
+       1465922.4,
+       522776.7
+      ],
+      [
+       1465917.7,
+       522814.4
+      ]
+     ]
+    ]
+   },
+   "geometry_name": "SHAPE",
+   "properties": {
+    "PMBC_PP_SYSID": 4915276,
+    "PARCEL_NAME": "012525499",
+    "PLAN_NUMBER": "KAP307",
+    "PID": "012525499",
+    "PID_FORMATTED": "012-525-499",
+    "PARCEL_STATUS": "Active",
+    "PARCEL_CLASS": "Subdivision",
+    "OWNER_TYPE": "Private",
+    "MUNICIPALITY": "Penticton, The Corporation of the City of",
+    "FEATURE_AREA_SQM": 36451.3914,
+    "OBJECTID": 203493550
+   }
+  }
+ ],
+ "numberMatched": 1,
+ "numberReturned": 1,
+ "timeStamp": "2026-10-26T03:58:13.276Z"
+}

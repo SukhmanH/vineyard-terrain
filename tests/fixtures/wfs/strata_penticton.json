@@ -1,0 +1,129 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "WHSE_CADASTRE.PMBC_PARCEL_POLY_SV.fid-2e756e83_1a176400aa3_346b",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1463386.8,
+       519134.0
+      ],
+      [
+       1463384.9,
+       519138.4
+      ],
+      [
+       1463380.7,
+       519147.9
+      ],
+      [
+       1463380.7,
+       519148.0
+      ],
+      [
+       1463380.5,
+       519147.9
+      ],
+      [
+       1463369.7,
+       519143.1
+      ],
+      [
+       1463367.3,
+       519142.1
+      ],
+      [
+       1463344.7,
+       519132.1
+      ],
+      [
+       1463344.9,
+       519131.6
+      ],
+      [
+       1463350.9,
+       519118.2
+      ],
+      [
+       1463359.2,
+       519121.8
+      ],
+      [
+       1463386.0,
+       519133.7
+      ],
+      [
+       1463386.8,
+       519134.0
+      ]
+     ]
+    ]
+   },
+   "geometry_name": "SHAPE",
+   "properties": {
+    "PMBC_PP_SYSID": 1788192,
+    "PARCEL_NAME": "Building Strata",
+    "PLAN_NUMBER": "EPS7378",
+    "PID": null,
+    "PID_FORMATTED": null,
+    "PARCEL_STATUS": "Active",
+    "PARCEL_CLASS": "Building Strata",
+    "OWNER_TYPE": "Unclassified",
+    "MUNICIPALITY": "Penticton, The Corporation of the City of",
+    "FEATURE_AREA_SQM": 598.8886,
+    "OBJECTID": 202212570
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "WHSE_CADASTRE.PMBC_PARCEL_POLY_SV.fid-2e756e83_1a176400aa3_346c",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1464049.8,
+       519541.1
+      ],
+      [
+       1464013.4,
+       519538.0
+      ],
+      [
+       1464014.3,
+       519528.0
+      ],
+      [
+       1464050.7,
+       519531.1
+      ],
+      [
+       1464049.8,
+       519541.1
+      ]
+     ]
+    ]
+   },
+   "geometry_name": "SHAPE",
+   "properties": {
+    "PMBC_PP_SYSID": 1804412,
+    "PARCEL_NAME": "Building Strata",
+    "PLAN_NUMBER": "KAS1489",
+    "PID": null,
+    "PID_FORMATTED": null,
+    "PARCEL_STATUS": "Active",
+    "PARCEL_CLASS": "Building Strata",
+    "OWNER_TYPE": "Unclassified",
+    "MUNICIPALITY": "Penticton, The Corporation of the City of",
+    "FEATURE_AREA_SQM": 367.4498,
+    "OBJECTID": 202218579
+   }
+  }
+ ],
+ "numberMatched": 589,
+ "numberReturned": 2
+}

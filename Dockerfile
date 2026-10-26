@@ -33,6 +33,8 @@ RUN python -c "import whitebox; whitebox.WhiteboxTools()" || \
 
 COPY backend/ backend/
 COPY frontend/ frontend/
+# NRCan reserve lot fabrics (parcel resolution on reserve land)
+COPY data/clss/ data/clss/
 
 # Job output and uploads live on a mounted volume so they survive a restart.
 RUN mkdir -p /data/uploads /data/output

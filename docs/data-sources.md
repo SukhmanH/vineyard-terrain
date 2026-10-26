@@ -72,6 +72,15 @@ PMBC_PP_SYSID) on the parcel layer runs into a 504 gateway timeout at 60 s. Unso
 queries answer in ~0.3 s. So parcel queries are one bounded page (`count`), and a response
 whose `numberMatched` is over `count` is an error rather than a silently short list.
 
+**PID lookups use `PID`, not `PID_FORMATTED`.** `PID='012525499'`, `PID_NUMBER=12525499` and
+`PARCEL_NAME='012525499'` answer in 0.1 to 0.2 s; `PID_FORMATTED='012-525-499'` is not
+indexed and times out at 60 s.
+
+All queries are a point, a `DWITHIN` radius or a `BBOX`, in EPSG:3005, so URLs stay short
+whatever the parcel's vertex count. Strata common property comes back with no PID and
+`OWNER_TYPE` Unclassified (`PARCEL_CLASS` Building Strata); rights of way are
+`PARCEL_CLASS` Interest with `PARCEL_NAME` "Statutory RoW".
+
 ### BCGS 1:2,500 grid
 
 `pub:WHSE_BASEMAPPING.BCGS_2500_GRID`. DescribeFeatureType: `MAP_TILE`,
@@ -142,8 +151,22 @@ short names: `OSOYOOS_1` does not exist.
 - `PENTICTON_1/PENTICTON_1_SHP.zip`, 3,113,356 bytes, Oct 12
 
 Also present: `OSOYOOS_3`, `PENTICTON_2`, `PENTICTON_3A`, and DWG and French/English copies.
-Imported once into `data/clss/` with the Open Government Licence - Canada notice (see
+Downloaded once into `data/clss/` with the Open Government Licence - Canada notice (see
 `data/clss/README.md` and `backend/pipeline/clss.py`).
+
+Each zip holds eleven layers (`Administrative_Area`, `Ancillary_Line`, `Condo_Eng`,
+`Easement`, `Land_Parcel`, `Land_Parcel_Boundary`, `Land_Parcel_Retired`,
+`Land_Parcel_Unresolved`, `Plan_Envelope`, `Reference_Point`, `Surveys_in_Progress`), in
+`NAD_1983_CSRS_UTM_Zone_11N` with UTF-8 attributes. The lots are `Land_Parcel`:
+
+| Reserve | Lots | Area | Fields |
+|---|---|---|---|
+| Osoyoos IR 1 | 925 | 32,158 ac (ParcelMap BC: 32,069) | `PIN` (unique), `DESIGNATOR` ("LOT 395", "ROAD R\W", "LANE"), `REMAIN_IND`, `PLAN_NUM` ("113152 CLSR BC"), `ADMIN_CODE`, `REMARKS`, `PCL_CLASS` ("Inside Canada Lands"), `PCL_STATE` ("Active"), `REG_PIN` |
+| Penticton IR 1 | 1,220 | 47,898 ac | same fields |
+
+The lot under the Black Sage test point is 26,076 ac: the unsubdivided remainder of the
+reserve. Lots over 2,000 ac are never offered as a listing's parcel; a drawn boundary is
+asked for instead.
 
 ## Not used
 

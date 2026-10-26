@@ -1,0 +1,215 @@
+{
+ "type": "FeatureCollection",
+ "queryAddress": "70 Upper Bench Rd, Penticton, BC",
+ "searchTimestamp": "2026-10-25T20:58:12",
+ "version": "4.5.4",
+ "crs": {
+  "type": "EPSG",
+  "properties": {
+   "code": 3005
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "crs": {
+     "type": "EPSG",
+     "properties": {
+      "code": 3005
+     }
+    },
+    "coordinates": [
+     1465592.0,
+     519557.0
+    ]
+   },
+   "properties": {
+    "fullAddress": "70 Upper Bench Rd S, Penticton, BC",
+    "score": 98,
+    "matchPrecision": "CIVIC_NUMBER",
+    "precisionPoints": 100,
+    "faults": [
+     {
+      "value": "",
+      "element": "STREET_DIRECTION",
+      "fault": "missing",
+      "penalty": 2
+     }
+    ],
+    "siteName": "",
+    "unitDesignator": "",
+    "unitNumber": "",
+    "unitNumberSuffix": "",
+    "civicNumber": 70,
+    "civicNumberSuffix": "",
+    "streetName": "Upper Bench",
+    "streetType": "Rd",
+    "isStreetTypePrefix": "false",
+    "streetDirection": "S",
+    "isStreetDirectionPrefix": "false",
+    "streetQualifier": "",
+    "localityName": "Penticton",
+    "streetAddress": "70 Upper Bench Rd S",
+    "localityType": "City",
+    "electoralArea": "",
+    "provinceCode": "BC",
+    "locationPositionalAccuracy": "high",
+    "locationDescriptor": "parcelPoint",
+    "siteID": "53724a3a-759d-41ce-9109-4e9f6bc6c30b",
+    "blockID": 545702,
+    "fullSiteDescriptor": "",
+    "accessNotes": "\"",
+    "siteStatus": "active",
+    "siteRetireDate": "9999-12-31",
+    "changeDate": "2026-07-07",
+    "isOfficial": "true"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "crs": {
+     "type": "EPSG",
+     "properties": {
+      "code": 3005
+     }
+    },
+    "coordinates": [
+     1465597.348,
+     519816.546
+    ]
+   },
+   "properties": {
+    "fullAddress": "70 Upper Bench Rd N, Penticton, BC",
+    "score": 97,
+    "matchPrecision": "BLOCK",
+    "precisionPoints": 99,
+    "faults": [
+     {
+      "value": "",
+      "element": "STREET_DIRECTION",
+      "fault": "missing",
+      "penalty": 2
+     }
+    ],
+    "siteName": "",
+    "unitDesignator": "",
+    "unitNumber": "",
+    "unitNumberSuffix": "",
+    "civicNumber": 70,
+    "civicNumberSuffix": "",
+    "streetName": "Upper Bench",
+    "streetType": "Rd",
+    "isStreetTypePrefix": "false",
+    "streetDirection": "N",
+    "isStreetDirectionPrefix": "false",
+    "streetQualifier": "",
+    "localityName": "Penticton",
+    "streetAddress": "70 Upper Bench Rd N",
+    "localityType": "City",
+    "electoralArea": "",
+    "provinceCode": "BC",
+    "locationPositionalAccuracy": "low",
+    "locationDescriptor": "accessPoint",
+    "siteID": "",
+    "blockID": 50961,
+    "fullSiteDescriptor": "",
+    "accessNotes": "",
+    "siteStatus": "",
+    "siteRetireDate": "",
+    "changeDate": "",
+    "isOfficial": "true"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "crs": {
+     "type": "EPSG",
+     "properties": {
+      "code": 3005
+     }
+    },
+    "coordinates": [
+     1469203.355,
+     566980.209
+    ]
+   },
+   "properties": {
+    "fullAddress": "70 Upper Canyon Dr N, Kelowna, BC",
+    "score": 77,
+    "matchPrecision": "BLOCK",
+    "precisionPoints": 99,
+    "faults": [
+     {
+      "value": "BENCH RD",
+      "element": "LOCALITY_GARBAGE",
+      "fault": "notAllowed",
+      "penalty": 3
+     },
+     {
+      "value": "UPPR",
+      "element": "STREET_NAME",
+      "fault": "partialMatch",
+      "penalty": 1
+     },
+     {
+      "value": "PENTICTON",
+      "element": "LOCALITY",
+      "fault": "isAlias",
+      "penalty": 4
+     },
+     {
+      "value": "",
+      "element": "STREET_DIRECTION",
+      "fault": "missing",
+      "penalty": 2
+     },
+     {
+      "value": "",
+      "element": "STREET_TYPE",
+      "fault": "missing",
+      "penalty": 6
+     },
+     {
+      "value": "",
+      "element": "FAULTS",
+      "fault": "tooMany",
+      "penalty": 6
+     }
+    ],
+    "siteName": "",
+    "unitDesignator": "",
+    "unitNumber": "",
+    "unitNumberSuffix": "",
+    "civicNumber": 70,
+    "civicNumberSuffix": "",
+    "streetName": "Upper Canyon",
+    "streetType": "Dr",
+    "isStreetTypePrefix": "false",
+    "streetDirection": "N",
+    "isStreetDirectionPrefix": "false",
+    "streetQualifier": "",
+    "localityName": "Kelowna",
+    "streetAddress": "70 Upper Canyon Dr N",
+    "localityType": "City",
+    "electoralArea": "",
+    "provinceCode": "BC",
+    "locationPositionalAccuracy": "low",
+    "locationDescriptor": "accessPoint",
+    "siteID": "",
+    "blockID": 2433387,
+    "fullSiteDescriptor": "",
+    "accessNotes": "",
+    "siteStatus": "",
+    "siteRetireDate": "",
+    "changeDate": "",
+    "isOfficial": "true"
+   }
+  }
+ ]
+}
