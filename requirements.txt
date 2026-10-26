@@ -6,4 +6,5 @@ numpy
 scipy
 matplotlib
 whitebox
+shapely
 pytest

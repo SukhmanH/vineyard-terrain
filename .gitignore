@@ -5,6 +5,8 @@ uploads/*
 output/*
 !uploads/.gitkeep
 !output/.gitkeep
+# LidarBC tile index and download cache (VTA_DATA_DIR/tiles)
+/tiles/
 
 # Internal design docs - keep local
 CLAUDE.md

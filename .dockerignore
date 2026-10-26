@@ -8,3 +8,4 @@ output/*
 !uploads/.gitkeep
 !output/.gitkeep
 tests/
+tiles/
