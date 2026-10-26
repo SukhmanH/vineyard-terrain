@@ -30,6 +30,38 @@ import rasterio
 # NaN inside a GeoTIFF confuses its flow tools, so we use a numeric sentinel.
 _ND = -32767.0
 
+# WhiteboxTools v2.4.0 FillDepressions panics now and then on several threads ("Error
+# unwrapping 'output'", exit 101): 1 run in 30 on the 2-core vineyard host, never on one
+# thread. The Python wrapper still reports success, so a step has succeeded only when its
+# output file exists, and a failed step runs once more.
+WBT_ATTEMPTS = 2
+
+
+def _wbt():
+    """A quiet WhiteboxTools. VTA_WBT_MAX_PROCS, when set, caps its threads; Whitebox keeps
+    that in its own settings.json, so it is re-applied on every job instead of trusted."""
+    import whitebox
+    wbt = whitebox.WhiteboxTools()
+    wbt.set_verbose_mode(False)
+    procs = os.environ.get("VTA_WBT_MAX_PROCS")
+    if procs and wbt.get_max_procs() != int(procs):
+        wbt.set_max_procs(int(procs))
+    return wbt
+
+
+def _step(run, output):
+    """Run one WhiteboxTools step until its output file exists, at most WBT_ATTEMPTS times."""
+    for _ in range(WBT_ATTEMPTS):
+        if os.path.exists(output):
+            os.remove(output)            # never mistake a half-written file for a result
+        try:
+            run()
+        except Exception:
+            pass
+        if os.path.exists(output):
+            return True
+    return False
+
 
 def _write_dem(z, mask, meta, path):
     """Write the native-grid elevation array as a GeoTIFF for Whitebox."""
@@ -68,7 +100,7 @@ def cold_air_routing(z, mask, meta, workdir):
     the routing mechanisms rather than aborting the whole job.
     """
     try:
-        import whitebox
+        wbt = _wbt()
     except ImportError:
         return None
 
@@ -80,20 +112,17 @@ def cold_air_routing(z, mask, meta, workdir):
 
     _write_dem(z, mask, meta, dem)
 
-    wbt = whitebox.WhiteboxTools()
-    wbt.set_verbose_mode(False)
-    try:
-        # fill without flat fixing so a filled hollow is exactly level and
-        # fill minus surface is the true ponding depth
-        rc1 = wbt.fill_depressions(dem, filled, fix_flats=False)
-        # breach (carve) rather than fill for routing: preferred for
-        # high-res LiDAR, keeps channels continuous without raising basins.
-        rc2 = wbt.breach_depressions_least_cost(dem, breached, dist=100)
-        rc3 = wbt.d_inf_flow_accumulation(breached, sca_path, out_type="sca")
-    except Exception:
+    # fill without flat fixing so a filled hollow is exactly level and
+    # fill minus surface is the true ponding depth
+    if not _step(lambda: wbt.fill_depressions(dem, filled, fix_flats=False), filled):
         return None
-    if rc1 != 0 or rc2 != 0 or rc3 != 0 or not (
-            os.path.exists(filled) and os.path.exists(sca_path)):
+    # breach (carve) rather than fill for routing: preferred for
+    # high-res LiDAR, keeps channels continuous without raising basins.
+    if not _step(lambda: wbt.breach_depressions_least_cost(dem, breached, dist=100),
+                 breached):
+        return None
+    if not _step(lambda: wbt.d_inf_flow_accumulation(breached, sca_path, out_type="sca"),
+                 sca_path):
         return None
 
     valid = ~mask
@@ -116,7 +145,7 @@ def edge_inflow(breached_path, loading, mask, meta, workdir):
     AOI cut off upslope ground that drains onto the parcel.
     """
     try:
-        import whitebox
+        wbt = _wbt()
     except ImportError:
         return None
     load_p = os.path.abspath(os.path.join(workdir, "edge_loading.tif"))
@@ -127,12 +156,7 @@ def edge_inflow(breached_path, loading, mask, meta, workdir):
     _write_dem(loading.astype("float32"), mask, meta, load_p)
     _write_dem(ones, mask, meta, eff_p)
     _write_dem(0.0 * ones, mask, meta, abs_p)
-    wbt = whitebox.WhiteboxTools()
-    wbt.set_verbose_mode(False)
-    try:
-        rc = wbt.d_inf_mass_flux(breached_path, load_p, eff_p, abs_p, out_p)
-    except Exception:
-        return None
-    if rc != 0 or not os.path.exists(out_p):
+    if not _step(lambda: wbt.d_inf_mass_flux(breached_path, load_p, eff_p, abs_p, out_p),
+                 out_p):
         return None
     return _read(out_p, ~mask)
