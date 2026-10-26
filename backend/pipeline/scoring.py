@@ -84,6 +84,17 @@ VALLEY_FLOOR_AXIS = (
     (49.040, -119.465, 277.5),   # Osoyoos Lake
     (48.950, -119.430, 277.5),   # Osoyoos Lake, south basin
 )
+# Lower Similkameen floor, Keremeos to the border, on the same terms: the 1st-percentile
+# LidarBC bare earth within 1.5 km of each point, which is the river (measured 2026-10-25).
+# A line of its own, never joined to the Okanagan one.
+SIMILKAMEEN_FLOOR_AXIS = (
+    (49.205, -119.835, 409.0),   # Keremeos
+    (49.190, -119.800, 398.0),   # between Keremeos and Cawston
+    (49.175, -119.760, 392.0),   # Cawston
+    (49.130, -119.735, 381.0),   # south of Cawston
+    (49.020, -119.720, 359.5),   # Chopaka, near the border
+)
+VALLEY_FLOOR_AXES = (VALLEY_FLOOR_AXIS, SIMILKAMEEN_FLOOR_AXIS)
 VALLEY_AXIS_KM = 4.0
 TCI_MID = 9.0             # ln(m): convergence index scoring 0.5
 TCI_WIDTH = 1.0
@@ -310,25 +321,25 @@ def _saturate(x, scale):
 
 
 def valley_floor_profile(lats, lons):
-    """Regional valley-floor elevation (m) and distance from the valley axis
-    (km) at each point, from VALLEY_FLOOR_AXIS. The floor is NaN farther than
-    VALLEY_AXIS_KM from the axis, where the table says nothing."""
+    """Regional valley-floor elevation (m) and distance from the nearest valley
+    axis (km) at each point, from VALLEY_FLOOR_AXES. The floor is NaN farther
+    than VALLEY_AXIS_KM from every axis, where the tables say nothing."""
     kx = 111.32 * np.cos(np.radians(49.3))   # km per degree; flat earth is
     ky = 110.57                              # fine over a 70 km valley
     qx = np.asarray(lons, dtype="float64") * kx
     qy = np.asarray(lats, dtype="float64") * ky
     best_d = np.full(qx.shape, np.inf)
     best_f = np.full(qx.shape, np.nan)
-    for (la0, lo0, f0), (la1, lo1, f1) in zip(VALLEY_FLOOR_AXIS[:-1],
-                                              VALLEY_FLOOR_AXIS[1:]):
-        ax, ay = lo0 * kx, la0 * ky
-        dx, dy = (lo1 - lo0) * kx, (la1 - la0) * ky
-        t = np.clip(((qx - ax) * dx + (qy - ay) * dy) / (dx * dx + dy * dy),
-                    0.0, 1.0)
-        d = np.hypot(qx - ax - t * dx, qy - ay - t * dy)
-        closer = d < best_d
-        best_d = np.where(closer, d, best_d)
-        best_f = np.where(closer, f0 + t * (f1 - f0), best_f)
+    for axis in VALLEY_FLOOR_AXES:
+        for (la0, lo0, f0), (la1, lo1, f1) in zip(axis[:-1], axis[1:]):
+            ax, ay = lo0 * kx, la0 * ky
+            dx, dy = (lo1 - lo0) * kx, (la1 - la0) * ky
+            t = np.clip(((qx - ax) * dx + (qy - ay) * dy) / (dx * dx + dy * dy),
+                        0.0, 1.0)
+            d = np.hypot(qx - ax - t * dx, qy - ay - t * dy)
+            closer = d < best_d
+            best_d = np.where(closer, d, best_d)
+            best_f = np.where(closer, f0 + t * (f1 - f0), best_f)
     return np.where(best_d <= VALLEY_AXIS_KM, best_f, np.nan), best_d
 
 

@@ -240,14 +240,20 @@ def test_all_nodata_returns_empty_stats():
 
 
 # ------------------------------------------------------------- geography
-def test_valley_floor_profile_covers_the_south_okanagan_only():
-    lats = np.array([49.5063, 49.2063, 49.0938, 49.205])
-    lons = np.array([-119.5625, -119.5375, -119.5375, -119.83])
+def test_valley_floor_profile_covers_the_south_okanagan_and_lower_similkameen():
+    lats = np.array([49.5063, 49.2063, 49.0938, 49.205, 49.175, 49.020, 49.05, 49.0775])
+    lons = np.array([-119.5625, -119.5375, -119.5375, -119.835, -119.76, -119.72, -119.35,
+                     -119.6325])
     floor, dist = scoring.valley_floor_profile(lats, lons)
     assert floor[0] == pytest.approx(342.0)                # Penticton bench: lake
     assert floor[1] == pytest.approx(296.5, abs=2.0)       # Oliver
     assert floor[2] == pytest.approx(280.0, abs=2.0)       # north Osoyoos
-    assert np.isnan(floor[3]) and dist[3] > 10             # Keremeos: off axis
+    assert floor[3] == pytest.approx(409.0, abs=0.5)       # Keremeos
+    assert floor[4] == pytest.approx(392.0, abs=0.5)       # Cawston
+    assert floor[5] == pytest.approx(359.5, abs=0.5)       # Chopaka
+    assert np.isnan(floor[6]) and dist[6] > 4              # Anarchist Mountain: off axis
+    # the two lines are not joined: the ridge between Osoyoos and Keremeos is off both
+    assert np.isnan(floor[7]) and dist[7] > 4
 
 
 def test_block_geography_reads_row_floors_from_the_tile_crs():
