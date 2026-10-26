@@ -69,15 +69,25 @@ def _run(tif_paths, out_dir, boundary=None):
     for a in (slope_deg, slope_pct, aspect_deg, hs, t):
         a[mask] = np.nan
 
-    # phase 4: cold-air drainage (flow accumulation). Degrades to None if
-    # WhiteboxTools is unavailable; the rest of the pipeline still runs.
+    # field-scale surface shared by routing and scoring, and hydro-flattened
+    # water, which is neither routed over nor scored
+    field = scoring.field_surface(z, mask, meta["res"])
+    water = scoring.water_mask(z, mask, meta["res"])
+
+    # phase 4: cold-air routing (contributing area, closed-hollow depth).
+    # Degrades to None if WhiteboxTools is unavailable; the rest still runs.
     hydro_dir = os.path.join(out_dir, "_hydro")
-    flowacc_log, flowacc_norm = hydrology.flow_accumulation(
-        z, mask, meta, hydro_dir)
+    routing = hydrology.cold_air_routing(
+        field["z"], mask | water, meta, hydro_dir)
+    flowacc_log = routing["flowacc_log"] if routing is not None else None
 
     # phase 5: frost risk + suitability composites (native grid).
+    geo = scoring.block_geography(meta)
     frost, suit, score_stats = scoring.frost_and_suitability(
-        z, t, slope_deg, slope_pct, aspect_deg, flowacc_norm, mask, meta["res"])
+        z, mask, meta["res"], lat=geo["lat"], field=field, routing=routing,
+        water=water, floor_rows=geo["floor_rows"])
+    has_drainage = routing is not None
+    del field, water, routing   # mosaics are large; render needs the memory
 
     # display artifacts. Layers whose source array is absent are skipped.
     arrays = {
@@ -131,7 +141,7 @@ def _run(tif_paths, out_dir, boundary=None):
             "is_dsm": is_dsm,
             "canopy_caveat": canopy,
             "partial_dtm": (not is_dsm) and nodata_pct > 30.0,
-            "has_drainage": flowacc_norm is not None,
+            "has_drainage": has_drainage,
         },
         "legends": legends,
     }

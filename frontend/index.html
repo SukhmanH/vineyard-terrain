@@ -147,6 +147,12 @@ const I18N = {
     to: "to", suitabilityAreas: "Suitability areas",
     aspectHeading: "Aspect (sloped ground)",
     excellent: "excellent", good: "good", marginal: "marginal", avoid: "avoid",
+    highFrost: "High frost risk", valleyFloor: "Valley floor",
+    floorValley: "Okanagan valley", floorBlock: "lowest flat ground in block",
+    floorNone: "not in this block", water: "Water (not scored)",
+    frostDrivers: "High frost risk comes from",
+    driver: { valley_floor:"Valley-floor cold pool", closed_hollow:"Closed hollows",
+      cold_air_flow:"Cold-air drainage paths", low_spot:"Low spots" },
     disclaimer: "Relative terrain risk only. Absolute temperatures come from " +
                 "field sensors, not from this model.",
     bannerDsm: "Surface model (DSM): treed areas exaggerate fine frost " +
@@ -181,6 +187,12 @@ const I18N = {
     to: "ਤੋਂ", suitabilityAreas: "ਯੋਗਤਾ ਖੇਤਰ",
     aspectHeading: "ਦਿਸ਼ਾ (ਢਲਾਣ ਵਾਲੀ ਜ਼ਮੀਨ)",
     excellent: "ਵਧੀਆ", good: "ਚੰਗਾ", marginal: "ਦਰਮਿਆਨਾ", avoid: "ਬਚੋ",
+    highFrost: "ਕੋਰੇ ਦਾ ਵੱਧ ਖ਼ਤਰਾ", valleyFloor: "ਘਾਟੀ ਦਾ ਤਲ",
+    floorValley: "ਓਕਾਨਾਗਨ ਘਾਟੀ", floorBlock: "ਬਲਾਕ ਦੀ ਸਭ ਤੋਂ ਨੀਵੀਂ ਪੱਧਰੀ ਜ਼ਮੀਨ",
+    floorNone: "ਇਸ ਬਲਾਕ ਵਿੱਚ ਨਹੀਂ", water: "ਪਾਣੀ (ਅੰਕ ਨਹੀਂ ਦਿੱਤੇ)",
+    frostDrivers: "ਕੋਰੇ ਦਾ ਵੱਧ ਖ਼ਤਰਾ ਕਿੱਥੋਂ ਆਉਂਦਾ ਹੈ",
+    driver: { valley_floor:"ਘਾਟੀ ਦੇ ਤਲ ਵਿੱਚ ਠੰਢੀ ਹਵਾ", closed_hollow:"ਬੰਦ ਟੋਏ",
+      cold_air_flow:"ਠੰਢੀ ਹਵਾ ਦੇ ਵਹਾਅ ਦੇ ਰਸਤੇ", low_spot:"ਨੀਵੀਆਂ ਥਾਂਵਾਂ" },
     disclaimer: "ਸਿਰਫ਼ ਸਾਪੇਖ ਭੂਮੀ ਜੋਖਮ। ਅਸਲ ਤਾਪਮਾਨ ਖੇਤ ਦੇ ਸੈਂਸਰਾਂ ਤੋਂ ਆਉਂਦੇ ਹਨ, " +
                 "ਇਸ ਮਾਡਲ ਤੋਂ ਨਹੀਂ।",
     bannerDsm: "ਸਤਹ ਮਾਡਲ (DSM): ਰੁੱਖਾਂ ਵਾਲੇ ਖੇਤਰ ਬਰੀਕ ਕੋਰੇ ਦੀਆਂ ਥਾਂਵਾਂ ਨੂੰ " +
@@ -197,6 +209,9 @@ let lang = "en";
 function t(key) { return (I18N[lang] && I18N[lang][key]) ?? I18N.en[key] ?? key; }
 function layerName(l) {
   return (I18N[lang].layer && I18N[lang].layer[l]) || I18N.en.layer[l] || l;
+}
+function driverName(d) {
+  return (I18N[lang].driver && I18N[lang].driver[d]) || I18N.en.driver[d] || d;
 }
 const LEGEND_CSS = {
   tpi:"linear-gradient(90deg,#b2182b,#f7f7f7,#2166ac)",
@@ -496,6 +511,18 @@ function renderStats(job) {
   h += row(t("coldAirPooling"),
            s.pooling["pct_lt_-0.5"] + t("ofGround"), true);
   h += row(t("strongSinks"), s.pooling["pct_lt_-1.0"] + "%");
+  // frost model v2 keys. Jobs scored before it lack them, and their
+  // pct_high_risk was ranked within the block (~8% everywhere), so skip it.
+  const fr = (s.frost && s.frost.model) ? s.frost : {};
+  if (fr.pct_high_risk !== undefined)
+    h += row(t("highFrost"), fr.pct_high_risk + t("ofGround"), true);
+  if (fr.floor_source) {
+    const known = fr.floor_source === "valley" || fr.floor_confidence >= 0.5;
+    h += row(t("valleyFloor"), known
+      ? "~" + Math.round(fr.floor_m) + " m (" +
+        t(fr.floor_source === "valley" ? "floorValley" : "floorBlock") + ")"
+      : t("floorNone"));
+  }
   if (s.plant_above_m !== null && s.plant_above_m !== undefined)
     h += row(t("plantAbove"), "~" + s.plant_above_m + " m", true);
   if (s.suitability_areas_ha) {
@@ -503,6 +530,13 @@ function renderStats(job) {
     const ac = s.suitability_areas_acres || {};
     for (const [k, v] of Object.entries(s.suitability_areas_ha))
       h += row(t(k), v + " ha" + (ac[k] !== undefined ? " / " + ac[k] + " ac" : ""));
+    if (s.water_ha) h += row(t("water"), s.water_ha + " ha");
+  }
+  if (fr.drivers_pct && fr.pct_high_risk > 0) {
+    h += "<h2>" + t("frostDrivers") + "</h2>";
+    Object.entries(fr.drivers_pct).filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([k, v]) => { h += row(driverName(k), v + "%"); });
   }
   const a = s.aspect_distribution_pct || {};
   h += "<h2>" + t("aspectHeading") + "</h2>";

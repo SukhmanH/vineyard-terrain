@@ -1,10 +1,20 @@
-"""Phase 4. Cold-air drainage via WhiteboxTools.
+"""Phase 4. Cold-air routing via WhiteboxTools.
 
 On clear calm nights cold air flows downslope like water and converges in the
-same channels and hollows that surface water would. We reuse hydrologic flow
-routing to find those convergence zones: breach depressions so drainage is not
-blocked by 1 m LiDAR speckle, then run D-infinity flow accumulation. High
-accumulation marks where cold air (and frost risk) concentrates.
+same channels and hollows that surface water would. We reuse hydrologic tools
+to find those places:
+  - fill depressions: fill minus surface is how deep cold air ponds in a
+    closed hollow before it spills over the rim (frost pockets, and slopes
+    dammed by road embankments or berms).
+  - breach depressions so routing is not blocked by LiDAR speckle, then run
+    D-infinity to get specific contributing area: how much upslope ground
+    drains through each cell.
+
+Routing runs on the field-scale surface (scoring.field_surface), not the raw
+1 m DEM: a cold-air layer metres thick follows the terrain at that scale, not
+decimetre ruts and vine rows. Hydro-flattened water is staged as NoData so
+lakes act as outlets, which is also how cold air behaves over open water, and
+so routing never has to resolve a 50 ha exact flat.
 
 WhiteboxTools is file based and downloads its binary on first run (needs the
 network once). It only reads and writes real files, so we stage a DEM built
@@ -33,58 +43,63 @@ def _write_dem(z, mask, meta, path):
         ds.write(zf, 1)
 
 
-def flow_accumulation(z, mask, meta, workdir):
-    """Run breach + D-inf flow accumulation on the native grid.
+def _read(path, valid):
+    """Read a Whitebox output as float32 with NaN wherever it has no data."""
+    with rasterio.open(path) as ds:
+        a = ds.read(1).astype("float32")
+        nd = ds.nodata
+    ok = valid & np.isfinite(a)
+    if nd is not None:
+        ok &= a != nd
+    a[~ok] = np.nan
+    return a
 
-    Returns (flowacc_log, flowacc_norm):
-      flowacc_log  - log1p(flow accumulation), NaN at NoData, for display.
-      flowacc_norm - flowacc_log scaled by its 95th percentile and clipped to
-                     [0, 1] over valid cells, for scoring.
-    On any Whitebox failure returns (None, None) so the pipeline can continue
-    without the drainage component rather than aborting the whole job.
+
+def cold_air_routing(z, mask, meta, workdir):
+    """Fill + breach + D-inf on the native grid.
+
+    z: field-scale surface; mask: True where there is no ground to route over
+    (NoData and water). Returns a dict of float32 grids, NaN where masked:
+      sca         D-inf specific contributing area (m).
+      sink_depth  depth below the spill point of a closed depression (m),
+                  0 outside depressions.
+      flowacc_log log1p(sca), for the display layer.
+    On any Whitebox failure returns None so the pipeline can continue without
+    the routing mechanisms rather than aborting the whole job.
     """
     try:
         import whitebox
     except ImportError:
-        return None, None
+        return None
 
     os.makedirs(workdir, exist_ok=True)
     dem = os.path.abspath(os.path.join(workdir, "dem.tif"))
+    filled = os.path.abspath(os.path.join(workdir, "filled.tif"))
     breached = os.path.abspath(os.path.join(workdir, "breached.tif"))
-    flowacc = os.path.abspath(os.path.join(workdir, "flowacc.tif"))
+    sca_path = os.path.abspath(os.path.join(workdir, "sca.tif"))
 
     _write_dem(z, mask, meta, dem)
 
     wbt = whitebox.WhiteboxTools()
     wbt.set_verbose_mode(False)
     try:
-        # breach (carve) rather than fill: preferred for high-res LiDAR, keeps
-        # channels continuous without raising whole basins.
-        rc1 = wbt.breach_depressions_least_cost(dem, breached, dist=100)
-        rc2 = wbt.d_inf_flow_accumulation(breached, flowacc, out_type="cells")
+        # fill without flat fixing so a filled hollow is exactly level and
+        # fill minus surface is the true ponding depth
+        rc1 = wbt.fill_depressions(dem, filled, fix_flats=False)
+        # breach (carve) rather than fill for routing: preferred for
+        # high-res LiDAR, keeps channels continuous without raising basins.
+        rc2 = wbt.breach_depressions_least_cost(dem, breached, dist=100)
+        rc3 = wbt.d_inf_flow_accumulation(breached, sca_path, out_type="sca")
     except Exception:
-        return None, None
-    if rc1 != 0 or rc2 != 0 or not os.path.exists(flowacc):
-        return None, None
-
-    with rasterio.open(flowacc) as ds:
-        acc = ds.read(1).astype("float32")
-        nd = ds.nodata
+        return None
+    if rc1 != 0 or rc2 != 0 or rc3 != 0 or not (
+            os.path.exists(filled) and os.path.exists(sca_path)):
+        return None
 
     valid = ~mask
-    if nd is not None:
-        valid &= (acc != nd)
-    valid &= np.isfinite(acc)
-
-    flowacc_log = np.full(acc.shape, np.nan, dtype="float32")
-    flowacc_log[valid] = np.log1p(acc[valid])
-
-    if not valid.any():
-        return flowacc_log, np.zeros(acc.shape, dtype="float32")
-
-    p95 = float(np.nanpercentile(flowacc_log[valid], 95))
-    if p95 <= 0:
-        p95 = float(np.nanmax(flowacc_log[valid])) or 1.0
-    norm = np.clip(np.nan_to_num(flowacc_log, nan=0.0) / p95, 0.0, 1.0)
-    norm[~valid] = 0.0
-    return flowacc_log, norm.astype("float32")
+    sca = _read(sca_path, valid)
+    depth = _read(filled, valid) - np.where(valid, z, np.nan)
+    depth = np.where(np.isfinite(depth), np.clip(depth, 0.0, None), np.nan)
+    flowacc_log = np.where(np.isfinite(sca), np.log1p(np.clip(sca, 0.0, None)),
+                           np.nan)
+    return {"sca": sca, "sink_depth": depth, "flowacc_log": flowacc_log}

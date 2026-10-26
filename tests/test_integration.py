@@ -65,6 +65,9 @@ def test_run_produces_output_contract(tmp_path):
 
     # ---- phase 5: frost + suitability present and self-consistent
     assert 0.0 <= parsed["frost"]["pct_high_risk"] <= 100.0
+    assert parsed["frost"]["model"] == "v2"
+    assert parsed["frost"]["floor_source"] in ("valley", "block")
+    assert parsed["water_ha"] == 0.0             # no flattened water here
     ha = parsed["suitability_areas_ha"]
     assert set(ha) == {"excellent", "good", "marginal", "avoid"}
     # class areas should sum to roughly the valid area
