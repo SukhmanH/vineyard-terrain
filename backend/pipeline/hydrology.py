@@ -102,4 +102,37 @@ def cold_air_routing(z, mask, meta, workdir):
     depth = np.where(np.isfinite(depth), np.clip(depth, 0.0, None), np.nan)
     flowacc_log = np.where(np.isfinite(sca), np.log1p(np.clip(sca, 0.0, None)),
                            np.nan)
-    return {"sca": sca, "sink_depth": depth, "flowacc_log": flowacc_log}
+    # the breached surface stays in workdir (the caller removes it) for edge_inflow
+    return {"sca": sca, "sink_depth": depth, "flowacc_log": flowacc_log,
+            "breached_path": breached}
+
+
+def edge_inflow(breached_path, loading, mask, meta, workdir):
+    """Where cold air entering across given cells ends up: D-inf mass flux of a loading
+    grid (1 on the cells it enters across, 0 elsewhere) over the breached routing surface.
+
+    Returns float32 flux (in cells of loading draining through each cell, NaN where
+    masked), or None if WhiteboxTools fails. The parcel path uses it to tell whether the
+    AOI cut off upslope ground that drains onto the parcel.
+    """
+    try:
+        import whitebox
+    except ImportError:
+        return None
+    load_p = os.path.abspath(os.path.join(workdir, "edge_loading.tif"))
+    eff_p = os.path.abspath(os.path.join(workdir, "edge_efficiency.tif"))
+    abs_p = os.path.abspath(os.path.join(workdir, "edge_absorption.tif"))
+    out_p = os.path.abspath(os.path.join(workdir, "edge_flux.tif"))
+    ones = np.ones(loading.shape, dtype="float32")
+    _write_dem(loading.astype("float32"), mask, meta, load_p)
+    _write_dem(ones, mask, meta, eff_p)
+    _write_dem(0.0 * ones, mask, meta, abs_p)
+    wbt = whitebox.WhiteboxTools()
+    wbt.set_verbose_mode(False)
+    try:
+        rc = wbt.d_inf_mass_flux(breached_path, load_p, eff_p, abs_p, out_p)
+    except Exception:
+        return None
+    if rc != 0 or not os.path.exists(out_p):
+        return None
+    return _read(out_p, ~mask)

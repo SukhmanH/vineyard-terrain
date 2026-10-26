@@ -10,48 +10,17 @@ import os
 import numpy as np
 import pytest
 import rasterio
-from rasterio.transform import from_origin
-from rasterio.warp import transform
-from shapely.geometry import Polygon
 
 from backend.pipeline import net, tiles
+from tests.helpers import X0, Y0, entry_for, utm_box, write_tile
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "bucket")
 ND = -32767.0
-X0, Y0 = 312000.0, 5452000.0      # Oliver, EPSG:2955
 
 
 def _fixture(name):
     with open(os.path.join(FIXTURES, name), "rb") as f:
         return f.read()
-
-
-def utm_box(x0, y0, x1, y1, crs="EPSG:2955"):
-    """A UTM rectangle as a shapely polygon in EPSG:3005."""
-    fx, fy = transform(crs, "EPSG:3005", [x0, x1, x1, x0], [y1, y1, y0, y0])
-    return Polygon(zip(fx, fy))
-
-
-def write_tile(path, x0, y_top, nx, ny, zfun, crs="EPSG:2955", nodata_where=None):
-    yy, xx = np.mgrid[0:ny, 0:nx].astype("float64")
-    X, Y = x0 + xx + 0.5, y_top - yy - 0.5
-    z = zfun(X, Y).astype("float32")
-    if nodata_where is not None:
-        z[nodata_where(X, Y)] = ND
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with rasterio.open(path, "w", driver="GTiff", width=nx, height=ny, count=1,
-                       dtype="float32", crs=crs, transform=from_origin(x0, y_top, 1, 1),
-                       nodata=ND) as ds:
-        ds.write(z, 1)
-    return path
-
-
-def entry_for(path, year, name, product="dem", lm="2026-01-01T00:00:00Z"):
-    e = tiles.parse_key(f"082/082e/{year}/{product}/{name}")
-    with rasterio.open(path) as ds:
-        e.update(tiles.header_of(ds))
-    e.update(size=os.path.getsize(path), etag="0" * 32, last_modified=lm)
-    return e
 
 
 def plane(X, Y, base=300.0, gx=0.10, gy=0.02):

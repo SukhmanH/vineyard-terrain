@@ -440,7 +440,8 @@ def frost_components(z, mask, res, field=None, routing=None, water=None,
     for c in comp.values():
         c[~land] = np.nan
     info = {"floor_m": floor_m, "floor_confidence": conf,
-            "floor_source": source, "land": land, "water": water}
+            "floor_source": source, "land": land, "water": water,
+            "floor": floor}    # scalar, or a column of per-row floors
     return comp, info
 
 
@@ -464,18 +465,59 @@ def frost_and_suitability(z, mask, res, lat=None, field=None, routing=None,
     Both grids are float32 with NaN outside scored land (NoData and water);
     stats carries the phase-5 keys for stats.json.
     """
-    shape = z.shape
-    frost = np.full(shape, np.nan, dtype="float32")
-    suit = np.full(shape, np.nan, dtype="float32")
     cell_ha = (res * res) / 10000.0
+    if field is None:
+        field = field_surface(z, mask, res)
+    if water is None:
+        water = water_mask(z, mask, res)
+    detail = score_detail(z, mask, res, lat, field, routing, water, floor_rows)
+    if detail is None:
+        empty = np.full(z.shape, np.nan, dtype="float32")
+        return empty, empty.copy(), _empty_stats(float(water.sum()) * cell_ha)
+    return detail["frost"], detail["suit"], block_stats(detail, res)
 
+
+def block_stats(detail, res):
+    """The phase-5 keys of stats.json for the whole block, from score_detail()."""
+    cell_ha = (res * res) / 10000.0
+    land, comp, info = detail["land"], detail["comp"], detail["info"]
+    fv, sv = detail["frost"][land], detail["suit"][land]
+    areas_ha = class_areas_ha(sv, res)
+    areas_acres = {k: round(v * ACRES_PER_HA, 1) for k, v in areas_ha.items()}
+    high = fv >= HIGH_RISK
+    return {
+        "frost": {
+            "model": MODEL,
+            "pct_high_risk": round(100.0 * float(high.mean()), 1),
+            "mean": round(float(fv.mean()), 1),
+            "drivers_pct": drivers_pct(comp, land),
+            "floor_m": round(info["floor_m"], 1),
+            "floor_source": info["floor_source"],
+            "floor_confidence": round(info["floor_confidence"], 2),
+        },
+        "heat": {"sun_vs_flat_mean": round(float(detail["ratio"][land].mean()), 3)},
+        "suitability_areas_ha": areas_ha,
+        "suitability_areas_acres": areas_acres,
+        "water_ha": round(float(detail["water"].sum()) * cell_ha, 1),
+    }
+
+
+def score_detail(z, mask, res, lat=None, field=None, routing=None, water=None,
+                 floor_rows=None):
+    """Every grid behind the frost and suitability scores, for callers that summarize
+    them over part of the block (zonal.py summarizes a parcel inside its AOI).
+
+    Returns None when there is no land, else a dict: frost and suit (float32, NaN outside
+    land), comp (the four mechanisms), info (floor, land, water), ratio (sun vs flat),
+    heat, slope_factor, land and water.
+    """
     if field is None:
         field = field_surface(z, mask, res)
     if water is None:
         water = water_mask(z, mask, res)
     land = ~mask & ~water
     if not land.any():
-        return frost, suit, _empty_stats(float(water.sum()) * cell_ha)
+        return None
 
     comp, info = frost_components(z, mask, res, field, routing, water,
                                   floor_rows)
@@ -488,44 +530,38 @@ def frost_and_suitability(z, mask, res, lat=None, field=None, routing=None,
     suit_g = np.clip((100.0 - frost_g) * (0.6 + 0.4 * heat) * slope_f,
                      0.0, 100.0)
 
+    frost = np.full(z.shape, np.nan, dtype="float32")
+    suit = np.full(z.shape, np.nan, dtype="float32")
     frost[land] = frost_g[land]
     suit[land] = suit_g[land]
-    fv, sv = frost_g[land], suit_g[land]
+    return {"frost": frost, "suit": suit, "comp": comp, "info": info,
+            "ratio": ratio, "heat": heat, "slope_factor": slope_f,
+            "land": land, "water": water}
 
-    # area accounting by suitability class
+
+def class_areas_ha(suit_values, res):
+    """Hectares per suitability class for a 1-D array of suitability scores."""
+    cell_ha = (res * res) / 10000.0
     areas_ha, lower = {}, np.inf
     for name, cut in CLASSES:
-        areas_ha[name] = round(float(((sv >= cut) & (sv < lower)).sum())
+        areas_ha[name] = round(float(((suit_values >= cut) & (suit_values < lower)).sum())
                                * cell_ha, 1)
         lower = cut
-    areas_acres = {k: round(v * ACRES_PER_HA, 1) for k, v in areas_ha.items()}
+    return areas_ha
 
-    # which mechanism dominates each high-risk cell
-    high = fv >= HIGH_RISK
+
+def drivers_pct(comp, sel):
+    """Share of the high-risk cells within sel (bool grid) that each mechanism dominates
+    (its weighted score is the largest of the four)."""
     names = list(WEIGHTS)
-    drivers = {k: 0.0 for k in names}
-    if high.any():
-        contrib = np.stack([WEIGHTS[k] * comp[k][land][high] for k in names])
-        top = np.argmax(contrib, axis=0)
-        drivers = {k: round(100.0 * float(np.mean(top == i)), 1)
-                   for i, k in enumerate(names)}
-
-    stats = {
-        "frost": {
-            "model": MODEL,
-            "pct_high_risk": round(100.0 * float(high.mean()), 1),
-            "mean": round(float(fv.mean()), 1),
-            "drivers_pct": drivers,
-            "floor_m": round(info["floor_m"], 1),
-            "floor_source": info["floor_source"],
-            "floor_confidence": round(info["floor_confidence"], 2),
-        },
-        "heat": {"sun_vs_flat_mean": round(float(ratio[land].mean()), 3)},
-        "suitability_areas_ha": areas_ha,
-        "suitability_areas_acres": areas_acres,
-        "water_ha": round(float(water.sum()) * cell_ha, 1),
-    }
-    return frost, suit, stats
+    frost = combine_frost({k: comp[k][sel] for k in names})
+    high = frost >= HIGH_RISK
+    if not high.any():
+        return {k: 0.0 for k in names}
+    contrib = np.stack([WEIGHTS[k] * comp[k][sel][high] for k in names])
+    top = np.argmax(contrib, axis=0)
+    return {k: round(100.0 * float(np.mean(top == i)), 1)
+            for i, k in enumerate(names)}
 
 
 def _empty_stats(water_ha=0.0):
