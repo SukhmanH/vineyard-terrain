@@ -345,16 +345,18 @@ def run_parcel(resolution, out_dir, buffer_m=None, entries=None, on_status=None,
     status = on_status or (lambda s: None)
     geom = resolution["geometry_3005"]
     buffer, off_axis = choose_buffer(geom, buffer_m)
-    entries = entries if entries is not None else tiles.load_index()
     os.makedirs(out_dir, exist_ok=True)
     workdir = os.path.join(out_dir, "_hydro")
     widened = False
     try:
         while True:
             aoi = geom.buffer(buffer)
+            # checked before anything is downloaded, the tile index included
             if not parcels.inside_service_area(aoi):
                 raise ParcelAnalysisError("the AOI reaches outside the southern interior "
                                           "area this service covers")
+            if entries is None:
+                entries = tiles.load_index()
             status("fetching")
             z, mask, meta, info = tiles.load_aoi(aoi, geom, entries)
             status("analyzing")

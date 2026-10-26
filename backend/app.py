@@ -1,15 +1,20 @@
 """FastAPI app. Run: uvicorn backend.app:app --reload --port 8000"""
+import hmac
 import json
 import os
 import re
 import uuid
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from . import jobs
 from .pipeline import run as pipeline_run
+from .pipeline import scoring, zonal
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # VTA_DATA_DIR points uploads/ and output/ at a mounted volume when the app
@@ -21,7 +26,18 @@ FRONTEND = os.path.join(ROOT, "frontend")
 os.makedirs(UPLOADS, exist_ok=True)
 os.makedirs(OUTPUT, exist_ok=True)
 
-app = FastAPI(title="Vineyard Terrain Analyzer")
+# Parcel scoring jobs run one at a time on a worker thread (backend/jobs.py). Run the API
+# with ONE uvicorn worker process: a second process would start a second queue.
+PARCEL_JOBS = jobs.ParcelJobs(OUTPUT)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    PARCEL_JOBS.start()
+    yield
+
+
+app = FastAPI(title="Vineyard Terrain Analyzer", lifespan=lifespan)
 
 # The static frontend is served from the vineyard site (hbbrosvineyards.com
 # /frost) while this API runs on its own host, so browsers send cross-origin
@@ -41,8 +57,84 @@ if _origins:
 @app.get("/api/health")
 def health():
     """Liveness probe for the container host, and the check the /frost page
-    uses to tell the visitor whether the analysis service is reachable."""
-    return {"ok": True, "jobs": len(os.listdir(OUTPUT))}
+    uses to tell the visitor whether the analysis service is reachable.
+    model_version tells a client (Hermes) which frost model its scores come from."""
+    return {"ok": True, "jobs": len(os.listdir(OUTPUT)), "frost_model": scoring.MODEL,
+            "model_version": zonal.MODEL_VERSION,
+            "parcel_jobs": bool(os.environ.get("VTA_API_TOKEN"))}
+
+
+# ------------------------------------------------------------------ parcel jobs
+class ParcelJobRequest(BaseModel):
+    """A listing to score. Structured fields only: free text from a listing email is
+    never sent here, and nothing in a request is ever fetched as a URL."""
+    model_config = ConfigDict(extra="forbid")
+
+    address: str | None = Field(None, max_length=200)
+    town: str | None = Field(None, max_length=80)
+    pid: str | list[str] | None = None
+    lat: float | None = Field(None, ge=48.0, le=51.0)
+    lon: float | None = Field(None, ge=-121.0, le=-118.0)
+    geometry: dict | str | None = None
+    listing_acres: float | None = Field(None, gt=0, le=5000)
+    buffer_m: float | None = Field(None, ge=200, le=2000)
+    ref: str | None = Field(None, max_length=120)
+    confirmed: bool = False
+    clss_id: str | None = Field(None, max_length=80)
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not (self.geometry or self.clss_id or self.pid or self.address
+                or (self.lat is not None and self.lon is not None)):
+            raise ValueError("a parcel needs a geometry, PID, lat/lon or address")
+        if (self.lat is None) != (self.lon is None):
+            raise ValueError("lat and lon go together")
+        pids = [self.pid] if isinstance(self.pid, str) else (self.pid or [])
+        if len(pids) > 10 or any(len(p) > 40 for p in pids):
+            raise ValueError("at most 10 PIDs")
+        if self.geometry is not None and len(json.dumps(self.geometry)) > 1_000_000:
+            raise ValueError("geometry is over 1 MB")
+        return self
+
+
+def _require_token(authorization):
+    """Parcel jobs make the server download data, so they need VTA_API_TOKEN."""
+    token = os.environ.get("VTA_API_TOKEN")
+    if not token:
+        raise HTTPException(503, "parcel jobs are disabled: VTA_API_TOKEN is not set")
+    scheme, _, value = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not value.strip():
+        raise HTTPException(401, "bearer token required",
+                            headers={"WWW-Authenticate": "Bearer"})
+    if not hmac.compare_digest(value.strip().encode(), token.encode()):
+        raise HTTPException(403, "invalid token")
+
+
+def _map_base(request):
+    return os.environ.get("VTA_MAP_BASE_URL") or str(request.base_url)
+
+
+@app.post("/api/parcel-jobs", status_code=202)
+def create_parcel_job(body: ParcelJobRequest, request: Request,
+                      authorization: str | None = Header(None)):
+    _require_token(authorization)
+    try:
+        job_id = PARCEL_JOBS.submit(body.model_dump(exclude_none=True))
+    except jobs.QueueFull as exc:
+        raise HTTPException(429, str(exc))
+    return {"job_id": job_id, "status": "queued",
+            "map_url": f"{_map_base(request).rstrip('/')}/?job={job_id}"}
+
+
+@app.get("/api/parcel-jobs/{job_id}")
+def get_parcel_job(job_id: str, request: Request):
+    """No token: the 32-character random id is the capability, so the map link works."""
+    if not jobs.JOB_ID_RE.fullmatch(job_id):
+        raise HTTPException(404, "no such parcel job")
+    view = PARCEL_JOBS.view(job_id, _map_base(request))
+    if view is None:
+        raise HTTPException(404, "no such parcel job")
+    return view
 
 
 @app.post("/api/upload")

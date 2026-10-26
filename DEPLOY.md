@@ -64,12 +64,40 @@ docker run -p 8000:8000 -v frost-data:/data \
 
 | Variable               | Default        | Purpose                                                                                   |
 | ---------------------- | -------------- | ----------------------------------------------------------------------------------------- |
-| `VTA_DATA_DIR`         | the repo root  | Where `uploads/` and `output/` live. Point at a mounted volume so jobs survive a restart.   |
+| `VTA_DATA_DIR`         | the repo root  | Where `uploads/`, `output/` and `tiles/` live. Point at a mounted volume so jobs and the tile cache survive a restart. |
 | `VTA_ALLOWED_ORIGINS`  | unset          | Comma-separated CORS allowlist. Unset means same-origin only, which is what local dev wants. |
+| `VTA_API_TOKEN`        | unset          | Bearer token for `POST /api/parcel-jobs`. Unset means parcel jobs are disabled (503), never open. |
+| `VTA_MAP_BASE_URL`     | the request's base URL | Base of the `map_url` a parcel job returns, e.g. `http://100.71.243.94:8000`. |
+| `VTA_SHEETS`           | `082e`         | Comma-separated BCGS sheets in the tile index. |
+| `VTA_TILE_CACHE_MB`    | `4000`         | Size cap of the downloaded tile cache; least recently used tiles are dropped first. |
+| `VTA_PARCEL_BUFFER_M`  | `750`          | Default AOI buffer around a parcel (a request's `buffer_m` overrides it). |
+| `VTA_GIT_SHA`          | `git rev-parse` | Commit recorded in each parcel job's provenance; set it where there is no `.git`. |
 
-`GET /api/health` returns `{"ok": true, "jobs": N}`. The container healthcheck
+`GET /api/health` returns `{"ok": true, "jobs": N, "frost_model": "v2",
+"model_version": "v2+z1", "parcel_jobs": true}`. The container healthcheck
 uses it, and so does the page: when the API does not answer, the upload box is
 replaced with an "analysis service offline" notice and the map still works.
+
+## Parcel jobs
+
+`POST /api/parcel-jobs` (bearer token) takes `{address?, town?, pid?, lat?, lon?,
+geometry?, listing_acres?, buffer_m?, ref?, confirmed?, clss_id?}` and answers 202
+`{job_id, status, map_url}`. `GET /api/parcel-jobs/{job_id}` needs no token (the
+32-character random id is the capability) and returns the status, the parcel, its
+metrics, provenance and the map link. The page opens a job with `/?job=<id>`.
+
+- **Run one uvicorn worker process.** Jobs run one at a time on a worker thread
+  inside the app; a second process would start a second queue.
+- Status lives in `output/<id>/status.json`; a restart re-queues unfinished jobs, and a
+  job interrupted twice is failed rather than retried forever.
+- Tiles come from the LidarBC object store into `tiles/cache/` (capped by
+  `VTA_TILE_CACHE_MB`). Build the index once, and again after a new LidarBC delivery:
+
+      python -m backend.pipeline.tiles refresh --sheet 082e    # ~2 minutes, ~6,000 headers
+
+- Parcel PNG layers are pruned after 30 days; the JSON is kept.
+- The only outbound hosts are the object store, the DataBC WFS and the BC geocoder
+  (`backend/pipeline/net.py`).
 
 ## Sizing the volume
 

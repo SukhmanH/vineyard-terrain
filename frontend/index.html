@@ -62,6 +62,16 @@
   .offline-note { border-left:3px solid var(--warn); background:rgba(255,179,0,.10);
                   color:var(--warn); padding:8px 10px; margin-top:8px;
                   border-radius:3px; font-size:12px; }
+  /* parcel jobs (?job=<id>) */
+  .hint { color:var(--muted); font-size:12px; margin:4px 0 0; }
+  .cand-label { background:rgba(20,23,26,.85); color:#ffb300; border:1px solid #ffb300;
+                font:600 12px system-ui; box-shadow:none; }
+  /* map links arrive on a phone: map on top, stats underneath */
+  @media (max-width: 700px) {
+    body { flex-direction:column-reverse; }
+    #sidebar { width:auto; min-width:0; height:45vh; }
+    #map { min-height:55vh; }
+  }
 </style>
 </head>
 <body>
@@ -162,6 +172,31 @@ const I18N = {
     layer: { suitability:"Suitability", frost:"Frost risk",
       tpi:"Cold-air pooling (TPI)", flowacc:"Flow accumulation", slope:"Slope",
       aspect:"Aspect", hillshade:"Hillshade", elevation:"Elevation" },
+    parcelHeading: "Parcel", aoiHeading: "Surrounding area",
+    frostScore: "Frost score",
+    frostScoreHint: "Spring/fall frost risk (terrain). 100 = least risk; " +
+                    "frost-safe = frost risk below 40.",
+    frostSafe: "Frost-safe / plantable", largestBlock: "Largest frost-safe block",
+    floorAbove: "Above the valley floor", coverage: "Bare-earth coverage",
+    confidence: "Confidence", flagsLabel: "Flags", acres: "ac",
+    parcelWaiting: "Scoring parcel", parcelFailed: "Parcel scoring failed",
+    parcelNeedsConfirm: "Which parcel is it? Candidates are outlined on the map.",
+    layersPruned: "Map layers for this parcel have expired; its numbers are kept.",
+    parcelDisclaimer: "Relative terrain risk of spring and fall radiative frost (clear " +
+                      "calm nights). Not a temperature, never a promise that ground will " +
+                      "not frost, and says nothing about a multi-day arctic freeze.",
+    candidate: "Candidate",
+    flag: { low_coverage:"partial bare-earth coverage", mixed_deliveries:"LiDAR deliveries mixed",
+      delivery_mix_refused:"neighbouring LiDAR delivery left out (seam step)",
+      buffer_widened:"context area widened",
+      buffer_inadequate:"upslope catchment may reach past the context area",
+      upslope_nodata:"upslope ground has no bare-earth data",
+      floor_from_block:"valley floor found from the surrounding ground",
+      weak_floor:"valley floor uncertain", no_plantable_land:"no plantable land",
+      aoi_resampled_2m:"analysed at 2 m", canopy_present:"trees or buildings present",
+      water_in_parcel:"water in the parcel", multi_pid:"several PIDs as one unit",
+      drawn_boundary:"drawn boundary", owner_confirmed:"parcel confirmed by owner",
+      reserve_lot:"reserve lot" },
   },
   pa: {
     title: "ਵਾਈਨਯਾਰਡ ਟੈਰੇਨ ਵਿਸ਼ਲੇਸ਼ਕ",
@@ -202,6 +237,20 @@ const I18N = {
     layer: { suitability:"ਯੋਗਤਾ", frost:"ਕੋਰੇ ਦਾ ਖ਼ਤਰਾ",
       tpi:"ਠੰਢੀ ਹਵਾ ਇਕੱਠੀ ਹੋਣਾ (TPI)", flowacc:"ਵਹਾਅ ਇਕੱਠਾ", slope:"ਢਲਾਣ",
       aspect:"ਦਿਸ਼ਾ", hillshade:"ਪਹਾੜੀ ਛਾਂ", elevation:"ਉਚਾਈ" },
+    parcelHeading: "ਪਲਾਟ", aoiHeading: "ਆਲੇ-ਦੁਆਲੇ ਦੀ ਜ਼ਮੀਨ",
+    frostScore: "ਕੋਰੇ ਦਾ ਸਕੋਰ",
+    frostScoreHint: "ਬਸੰਤ/ਪਤਝੜ ਦੇ ਕੋਰੇ ਦਾ ਖ਼ਤਰਾ (ਜ਼ਮੀਨ ਮੁਤਾਬਕ)। 100 = ਸਭ ਤੋਂ ਘੱਟ ਖ਼ਤਰਾ; " +
+                    "ਘੱਟ ਖ਼ਤਰਾ = 40 ਤੋਂ ਹੇਠਾਂ।",
+    frostSafe: "ਘੱਟ ਖ਼ਤਰੇ ਵਾਲੇ / ਲਾਉਣ ਯੋਗ", largestBlock: "ਸਭ ਤੋਂ ਵੱਡਾ ਘੱਟ ਖ਼ਤਰੇ ਵਾਲਾ ਟੁਕੜਾ",
+    floorAbove: "ਘਾਟੀ ਦੇ ਤਲ ਤੋਂ ਉੱਚਾਈ", coverage: "ਨੰਗੀ-ਜ਼ਮੀਨ ਡਾਟਾ",
+    confidence: "ਭਰੋਸਾ", flagsLabel: "ਨੋਟ", acres: "ਏਕੜ",
+    parcelWaiting: "ਪਲਾਟ ਦਾ ਹਿਸਾਬ ਚੱਲ ਰਿਹਾ ਹੈ", parcelFailed: "ਪਲਾਟ ਦਾ ਹਿਸਾਬ ਨਹੀਂ ਹੋ ਸਕਿਆ",
+    parcelNeedsConfirm: "ਕਿਹੜਾ ਪਲਾਟ ਹੈ? ਨਕਸ਼ੇ ਉੱਤੇ ਵਿਕਲਪ ਦਿਖਾਏ ਹਨ।",
+    layersPruned: "ਇਸ ਪਲਾਟ ਦੀਆਂ ਨਕਸ਼ਾ ਪਰਤਾਂ ਮਿਟ ਗਈਆਂ ਹਨ; ਅੰਕੜੇ ਰੱਖੇ ਹੋਏ ਹਨ।",
+    parcelDisclaimer: "ਸਾਫ਼ ਅਤੇ ਸ਼ਾਂਤ ਰਾਤਾਂ ਨੂੰ ਬਸੰਤ ਅਤੇ ਪਤਝੜ ਦੇ ਕੋਰੇ ਦਾ ਸਾਪੇਖ ਭੂਮੀ ਖ਼ਤਰਾ। " +
+                      "ਇਹ ਤਾਪਮਾਨ ਨਹੀਂ, ਕੋਰਾ ਨਾ ਪੈਣ ਦਾ ਵਾਅਦਾ ਨਹੀਂ, ਅਤੇ ਕਈ ਦਿਨਾਂ ਦੀ ਕੜਾਕੇ " +
+                      "ਦੀ ਠੰਢ ਬਾਰੇ ਕੁਝ ਨਹੀਂ ਦੱਸਦਾ।",
+    candidate: "ਵਿਕਲਪ",
   },
 };
 
@@ -212,6 +261,9 @@ function layerName(l) {
 }
 function driverName(d) {
   return (I18N[lang].driver && I18N[lang].driver[d]) || I18N.en.driver[d] || d;
+}
+function flagName(f) {
+  return (I18N[lang].flag && I18N[lang].flag[f]) || I18N.en.flag[f] || f.replace(/_/g, " ");
 }
 const LEGEND_CSS = {
   tpi:"linear-gradient(90deg,#b2182b,#f7f7f7,#2166ac)",
@@ -237,6 +289,10 @@ const LANG_KEY = "vta_lang_v1";
 const blocks = new Map();
 let currentLayer = "suitability";   // shared metric across all blocks
 let activeId = null;                // block driving the stats sidebar
+// parcel jobs carry 32-hex ids (the id is the capability for the map link)
+const PARCEL_ID = /^[0-9a-f]{32}$/;
+const outlines = new Map();         // parcel job id -> outline layer
+map.createPane("parcels").style.zIndex = 450;   // outlines above the analysis overlay
 
 // ---------------------------------------------------------------- language
 function applyLang() {
@@ -274,7 +330,9 @@ function saveBlocks() {
   localStorage.setItem(STORE_KEY, JSON.stringify(
     { ids, visible: vis, layer: currentLayer, active: activeId }));
 }
-async function restoreBlocks() {
+// fit=false when a ?job= link decides the view: Leaflet drops a new view while a
+// zoom animation is still running, so a second fit would be ignored
+async function restoreBlocks(fit=true) {
   let saved; try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); }
   catch { saved = null; }
   if (!saved || !saved.ids || !saved.ids.length) return;
@@ -283,11 +341,12 @@ async function restoreBlocks() {
     try {
       const job = await fetchJob(id);       // 404 if the server dropped it
       addBlock(job, saved.visible[id] !== false, false);
+      if (PARCEL_ID.test(id)) await drawParcel(id, saved.visible[id] !== false);
     } catch { /* stale id; skip */ }
   }
   if (saved.active && blocks.has(saved.active)) setActive(saved.active);
   else if (blocks.size) setActive([...blocks.keys()][0]);
-  fitAll();
+  if (fit) fitAll();
   saveBlocks();
 }
 
@@ -360,7 +419,10 @@ function removeBlock(id, persist=true) {
   if (!blk) return;
   map.removeLayer(blk.overlay);
   blocks.delete(id);
-  fetch(API + "/api/jobs/" + id, { method:"DELETE" }).catch(()=>{});
+  const outline = outlines.get(id);
+  if (outline) { map.removeLayer(outline); outlines.delete(id); }
+  if (!PARCEL_ID.test(id))     // parcel jobs belong to Hermes' records; only hide them
+    fetch(API + "/api/jobs/" + id, { method:"DELETE" }).catch(()=>{});
   if (activeId === id) activeId = null;
   if (!activeId && blocks.size) setActive([...blocks.keys()][0]);
   if (!blocks.size) clearAnalysisPanels();
@@ -372,6 +434,8 @@ function toggleBlock(id, visible) {
   const blk = blocks.get(id); if (!blk) return;
   blk.visible = visible;
   if (visible) blk.overlay.addTo(map); else map.removeLayer(blk.overlay);
+  const outline = outlines.get(id);
+  if (outline) { if (visible) outline.addTo(map); else map.removeLayer(outline); }
   saveBlocks();
 }
 
@@ -501,6 +565,23 @@ function renderStats(job) {
   const s = job.stats, el = document.getElementById("stats");
   document.getElementById("stats-for").textContent = blockLabel(job);
   let h = "";
+  const p = s.parcel;
+  if (p) {
+    const ac = v => (v === null || v === undefined) ? "n/a" : v + " " + t("acres");
+    h += "<h2>" + t("parcelHeading") + (p.pid ? " " + p.pid : "") + "</h2>";
+    h += row(t("frostScore"), p.frost_score ?? "n/a", true);
+    h += row(t("frostSafe"), ac(p.frost_safe_acres) + " / " + ac(p.plantable_acres), true);
+    h += row(t("largestBlock"), ac(p.largest_contiguous_safe_acres));
+    if (p.pct_high_risk !== null) h += row(t("highFrost"), p.pct_high_risk + t("ofGround"));
+    if (p.height_above_floor_median_m !== null)
+      h += row(t("floorAbove"), "~" + Math.round(p.height_above_floor_median_m) + " m");
+    h += row(t("coverage"), p.coverage_pct + "%");
+    h += row(t("confidence"), p.confidence);
+    if (p.flags && p.flags.length)
+      h += row(t("flagsLabel"), p.flags.map(flagName).join(", "));
+    h += '<div class="hint">' + t("frostScoreHint") + '</div>';
+    h += "<h2>" + t("aoiHeading") + "</h2>";
+  }
   h += row(t("validArea"), s.coverage.valid_ha + " ha / " +
            s.coverage.valid_acres + " ac", true);
   h += row(t("noData"), s.coverage.nodata_pct + "%");
@@ -544,8 +625,67 @@ function renderStats(job) {
     if (a[d] !== undefined) h += row(d, a[d] + "%");
   });
   h += `<div style="color:var(--muted);font-size:12px;margin-top:10px">` +
-       t("disclaimer") + `</div>`;
+       t(p ? "parcelDisclaimer" : "disclaimer") + `</div>`;
   el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------- parcel jobs
+// A map link from Hermes opens ?job=<id>: the parcel's AOI layers with its outline,
+// or, while the owner still has to pick the parcel, the candidates.
+async function drawParcel(id, visible=true) {
+  try {
+    const r = await fetch(API + "/output/" + id + "/parcel.geojson");
+    if (!r.ok) return null;
+    const fc = await r.json();
+    const layer = L.geoJSON(fc, {
+      pane: "parcels",
+      filter: f => f.properties.role !== "aoi",
+      style: f => f.properties.role === "parcel"
+        ? { color:"#ffffff", weight:2.5, fill:false }
+        : { color:"#ffb300", weight:2, dashArray:"5 4", fill:false },
+      onEachFeature: (f, l) => {
+        const q = f.properties;
+        if (q.role === "candidate")
+          l.bindTooltip(q.index + ". " + (q.pid || q.designator || t("candidate")) + ", " +
+                        q.acres + " " + t("acres"),
+                        { permanent:true, direction:"center", className:"cand-label" });
+      },
+    });
+    if (visible) layer.addTo(map);
+    outlines.set(id, layer);
+    return layer;
+  } catch { return null; }
+}
+
+async function openParcelJob(id) {
+  let st;
+  try {
+    const r = await fetch(API + "/api/parcel-jobs/" + id, { cache:"no-store" });
+    if (!r.ok) throw new Error(r.status === 404 ? "job not found" : r.statusText);
+    st = await r.json();
+  } catch (err) { statusEl.textContent = t("parcelFailed") + ": " + err.message; return; }
+  if (st.status === "done") {
+    if (!blocks.has(id)) {
+      addBlock(await fetchJob(id), true, true);
+      setActive(id);
+      saveBlocks();
+    }
+    const outline = outlines.get(id) || await drawParcel(id);
+    if (outline && outline.getLayers().length) map.fitBounds(outline.getBounds().pad(0.6));
+    statusEl.textContent = st.layers_pruned ? t("layersPruned") : "";
+    // a link opened on a phone: show the parcel's numbers, not the upload box
+    document.getElementById("stats-for").scrollIntoView({ block:"start" });
+  } else if (st.status === "needs_confirmation") {
+    const outline = await drawParcel(id);
+    if (outline && outline.getLayers().length) map.fitBounds(outline.getBounds().pad(0.3));
+    statusEl.textContent = t("parcelNeedsConfirm") + " " +
+      ((st.parcel && st.parcel.reasons) || []).join("; ");
+  } else if (st.status === "failed") {
+    statusEl.textContent = t("parcelFailed") + ": " + (st.error || "");
+  } else {
+    statusEl.textContent = t("parcelWaiting") + " (" + st.status + ") ...";
+    setTimeout(() => openParcelJob(id), 10000);
+  }
 }
 
 // ---------------------------------------------------------------- boot
@@ -574,7 +714,13 @@ async function checkBackend() {
 
 lang = (localStorage.getItem(LANG_KEY) === "pa") ? "pa" : "en";
 applyLang();      // sets static text + empty-state panels in the saved language
-checkBackend().then(ok => { if (ok) restoreBlocks(); });
+checkBackend().then(async ok => {
+  if (!ok) return;
+  const job = new URLSearchParams(location.search).get("job");
+  const linked = job && PARCEL_ID.test(job);
+  await restoreBlocks(!linked);
+  if (linked) openParcelJob(job);
+});
 </script>
 </body>
 </html>
