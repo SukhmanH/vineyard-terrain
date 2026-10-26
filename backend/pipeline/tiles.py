@@ -685,7 +685,7 @@ def main(argv=None):
     f = sub.add_parser("find", help="deliveries covering a point and buffer")
     f.add_argument("--lat", type=float, required=True)
     f.add_argument("--lon", type=float, required=True)
-    f.add_argument("--buffer", type=float, default=750.0)
+    f.add_argument("--buffer", type=float, default=1000.0)
     args = ap.parse_args(argv)
 
     if args.cmd == "refresh":

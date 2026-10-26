@@ -70,7 +70,7 @@ docker run -p 8000:8000 -v frost-data:/data \
 | `VTA_MAP_BASE_URL`     | the request's base URL | Base of the `map_url` a parcel job returns, e.g. `http://100.71.243.94:8000`. |
 | `VTA_SHEETS`           | `082e`         | Comma-separated BCGS sheets in the tile index. |
 | `VTA_TILE_CACHE_MB`    | `4000`         | Size cap of the downloaded tile cache; least recently used tiles are dropped first. |
-| `VTA_PARCEL_BUFFER_M`  | `750`          | Default AOI buffer around a parcel (a request's `buffer_m` overrides it). |
+| `VTA_PARCEL_BUFFER_M`  | `1000`         | Default AOI buffer around a parcel (a request's `buffer_m` overrides it). |
 | `VTA_GIT_SHA`          | `git rev-parse` | Commit recorded in each parcel job's provenance; set it where there is no `.git`. |
 
 `GET /api/health` returns `{"ok": true, "jobs": N, "frost_model": "v2",

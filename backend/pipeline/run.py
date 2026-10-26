@@ -40,7 +40,9 @@ LAYER_SPECS = [
     ("suitability", "RdYlGn", "pct"),
 ]
 
-DEFAULT_BUFFER_M = 750.0     # AOI ring around a parcel (VTA_PARCEL_BUFFER_M overrides)
+# AOI ring around a parcel (VTA_PARCEL_BUFFER_M overrides). 750 m moved Hwy 97's high-risk
+# share 3.7 points against 1,000 m; from 1,000 m out the six properties move <= 0.7.
+DEFAULT_BUFFER_M = 1000.0
 OFF_AXIS_BUFFER_M = 1250.0   # off the valley-axis table the AOI must reach the real floor
 WIDEN_FACTOR = 2.0           # one widening when cold air enters across the AOI edge
 MAX_BUFFER_M = 2000.0
